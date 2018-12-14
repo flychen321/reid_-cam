@@ -474,15 +474,24 @@ if not refine:
     base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
     classifier_params = filter(lambda p: id(p) in ignored_params, model.parameters())
     # Observe that all parameters are being optimized
-    lr_ratio = 1
+    part_train = True
+    if part_train:
+        epoc = 30
+        lr_ratio = 0.1
+        step = epoc/3
+    else:
+        epoc= 130
+        lr_ratio = 1
+        step = epoc/3
+
     optimizer_ft = optim.SGD([
                  {'params': base_params, 'lr': 0.01*lr_ratio},
                  {'params': classifier_params, 'lr': 0.05*lr_ratio}
              ], momentum=0.9, weight_decay=5e-4, nesterov=True)
 
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=40, gamma=0.1)
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=130, refine=False)
+                       num_epochs=epoc, refine=False)
 
 #for refine
 model = load_network(model)
