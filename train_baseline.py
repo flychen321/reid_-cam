@@ -40,6 +40,8 @@ parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 opt = parser.parse_args()
 
+opt.use_dense = True
+
 data_dir = opt.data_dir
 name = opt.name
 
@@ -86,6 +88,34 @@ data_transforms = {
     'val': transforms.Compose(transform_val_list),
 }
 
+def load_network(network):
+    save_path = os.path.join('./model',name,'whole_net_%s.pth'%'best')
+    net_original = torch.load(save_path)
+    # print(net_original.model.features.conv0.weight[0][0])
+    pretrained_dict = net_original.state_dict()
+    model_dict = network.state_dict()
+    pretrained_dict = {k:v for k,v in pretrained_dict.items() if k in model_dict}
+    model_dict.update(pretrained_dict)
+    network.load_state_dict(model_dict)
+    # print(network.model.features.conv0.weight[0][0])
+    # exit()
+    return network
+
+
+######################################################################
+# Save model
+#---------------------------
+def save_network(network, epoch_label):
+    save_filename = 'net_%s.pth'% epoch_label
+    save_path = os.path.join('./model',name,save_filename)
+    torch.save(network.state_dict(), save_path)
+    # this step is important, or error occurs "runtimeError: tensors are on different GPUs"
+ #   if torch.cuda.is_available:
+ #       network.cuda(gpu_ids[0])
+    #if torch.cuda.is_available:
+    #    network=nn.DataParallel(network,device_ids=[0,1,2]) # multi-GPU
+
+
 # read dcgan data
 class dcganDataset(Dataset):
     def __init__(self, root,transform=None, targte_transform=None):   
@@ -93,6 +123,7 @@ class dcganDataset(Dataset):
         self.image_dir = os.path.join(opt.data_dir, root)
         self.samples=[]   # train_data   xxx_label_flag_yyy.jpg
         self.img_label=[]
+        self.img_label_cam=[]
         self.img_flag=[]
         self.transform=transform
         self.targte_transform=targte_transform
@@ -105,12 +136,17 @@ class dcganDataset(Dataset):
                     for files in os.listdir(fdir):
                         temp=folder+'_'+files
                         self.img_label.append(int(folder[-4:]))
+                        self.img_label_cam.append(0)
                         self.img_flag.append(1)
                         self.samples.append(temp)
                 else:
                     for files in os.listdir(fdir):
                         temp=folder+'_'+files
                         self.img_label.append(int(folder))
+                        # print(temp)
+                        # print(files)
+                        # print(files[6])
+                        self.img_label_cam.append(int(files[6])-1)
                         self.img_flag.append(0)
                         self.samples.append(temp)
         else:                           #val
@@ -119,6 +155,7 @@ class dcganDataset(Dataset):
                 for files in os.listdir(fdir):
                     temp=folder+'_'+files
                     self.img_label.append(int(folder))
+                    self.img_label_cam.append(int(files[6])-1)
                     self.img_flag.append(0)
                     self.samples.append(temp)
 
@@ -137,9 +174,9 @@ class dcganDataset(Dataset):
             filename=temp[5:]
         img=default_loader(self.image_dir +'/'+foldername+'/'+filename)
         if self.train_val=='train_new':
-            result = {'img': data_transforms['train'](img), 'label': self.img_label[idx], 'flag':self.img_flag[idx]} # flag=0 for ture data and 0 for generated data
+            result = {'img': data_transforms['train'](img), 'label': self.img_label[idx], 'label_cam': self.img_label_cam[idx], 'flag':self.img_flag[idx]} # flag=0 for ture data and 0 for generated data
         else:
-            result = {'img': data_transforms['val'](img), 'label': self.img_label[idx], 'flag':self.img_flag[idx]} 
+            result = {'img': data_transforms['val'](img), 'label': self.img_label[idx], 'label_cam': self.img_label_cam[idx], 'flag':self.img_flag[idx]}
         return result
 
 class LSROloss(nn.Module):
@@ -161,13 +198,12 @@ class LSROloss(nn.Module):
         target=target.view(-1,1)      # batchsize*1
         flg=flg.view(-1,1) 
         #len=flg.size()[0]
-        flos=F.log_softmax(input)    # N*K?      batchsize*751
+        flos=F.log_softmax(input, 1)    # N*K?      batchsize*751
         flos=torch.sum(flos,1)/flos.size(1)       # N*1  get average      gan loss    
-        logpt=F.log_softmax(input)   # size: batchsize*751
-       # print(logpt)
-        logpt=logpt.gather(1,target)   # here is a problem 
-        logpt=logpt.view(-1)           # N*1     original loss   
-        flg=flg.view(-1) 
+        logpt=F.log_softmax(input, 1)   # size: batchsize*751
+        logpt=logpt.gather(1,target)   # here is a problem
+        logpt=logpt.view(-1)
+        flg=flg.view(-1)
         flg=flg.type(torch.cuda.FloatTensor)
         loss=-1*logpt*(1-flg)-flos*flg
         return loss.mean()
@@ -203,7 +239,7 @@ y_err = {}
 y_err['train'] = []
 y_err['val'] = []
 
-def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
+def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=True):
     since = time.time()
     best_model_wts = model.state_dict()
     best_acc = 0.0
@@ -222,28 +258,69 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
+            running_corrects_cam = 0
+            running_corrects_wo_cam = 0
+            running_corrects_6cams = 0
 
             # Iterate over data.
             for data in dataloaders[phase]:
                 # get the inputs
                 inputs=data['img']
                 labels=data['label']
+                labels_cam = data['label_cam']
                 flags= data['flag']
                 
                 if use_gpu:
                     inputs = Variable(inputs.cuda())
                     labels = Variable(labels.cuda())
+                    labels_cam = Variable(labels_cam.cuda())
                     flags=Variable(flags.cuda())
                 else:
-                    inputs, labels,flags = Variable(inputs), Variable(labels), Variable(flags)
+                    inputs, labels, labels_cam, flags = Variable(inputs), Variable(labels), Variable(labels_cam), Variable(flags)
                         
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
                 # forward
-                outputs = model(inputs)
+                if phase =='train':
+                    result = model(inputs)
+                else:
+                    with torch.no_grad():
+                        result = model(inputs)
+                # result = model(inputs)
+                outputs = result[0]
+                outputs_cam = result[1]
+                outputs_wo_cam = result[2]
+                outputs_6cams = result[3]
                 _, preds = torch.max(outputs.data, 1)   # outputs.data  return the index of the biggest value in each row
-                loss = criterion(outputs,labels,flags)
+                _cam, preds_cam = torch.max(outputs_cam.data, 1)   # outputs.data  return the index of the biggest value in each row
+                _wo_cam, preds_wo_cam = torch.max(outputs_wo_cam.data, 1)   # outputs.data  return the index of the biggest value in each row
+                loss_ = criterion(outputs,labels,flags)
+                loss_cam = criterion(outputs_cam,labels_cam,flags)
+                loss_wo_cam = criterion(outputs_wo_cam,labels,flags)
+                # loss_6cams = 0
+                loss_6cams = torch.Tensor(outputs_6cams.shape[0])
+                preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
+                # for i in range(outputs_6cams.shape[0]):
+                cam_start = 0
+                cam_end = 7
+                for i in range(cam_start, cam_end):
+                    _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
+                    temp = criterion(outputs_6cams[i],labels,flags)
+                    # loss_6cams = loss_6cams + temp
+                    loss_6cams[i] = temp
+                # _6cams, preds_6cams = torch.max(outputs_6cams.data, 1)
+                # loss_6cams = criterion(outputs_6cams, labels, flags)
+                # print('loss_       = %.5f' % loss_.data)
+                # print('loss_cam    = %.5f' % loss_cam.data)
+                # print('loss_wo_cam = %.5f' % loss_wo_cam.data)
+                # loss = loss_6cams[0] + loss_6cams[1] + loss_6cams[2] + loss_6cams[3] + loss_6cams[4] + loss_6cams[5] + loss_6cams[6]
+                if refine:
+                    r = 6
+                    loss = (r*loss_6cams[0] + torch.sum(loss_6cams[1:]))/(len(loss_6cams))
+                    # print('mid loss_6cams  = %s' % loss_6cams.data)
+                else:
+                    loss = loss_ + loss_cam + loss_wo_cam
 
                 # backward + optimize only if in training phase
                 if phase == 'train':
@@ -256,18 +333,71 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 for temp in range(flags.size()[0]):
                     if flags.data[temp]==1:
                         preds[temp]=-1
+
+                for temp in range(flags.size()[0]):
+                    if flags.data[temp]==1:
+                        preds_cam[temp]=-1
+
+                for temp in range(flags.size()[0]):
+                    if flags.data[temp]==1:
+                        preds_wo_cam[temp]=-1
+
+                for temp in range(flags.size()[0]):
+                    if flags.data[temp]==1:
+                        for i in range(cam_start, cam_end):
+                            preds_6cams[i][temp]=-1
                 
                 running_corrects += torch.sum(preds == labels.data)
+                running_corrects_cam += torch.sum(preds_cam == labels_cam.data)
+                running_corrects_wo_cam += torch.sum(preds_wo_cam == labels.data)
+                # for i in range(6):
+                for i in range(cam_start, cam_end):
+                    running_corrects_6cams += torch.sum(preds_6cams[i] == labels.data)
+                # print('acc = %.5f' % (float(running_corrects_6cams) / (dataset_sizes[phase]-generated_image_size)))
+                # running_corrects_6cams += torch.sum(preds_6cams == labels.data)
                 # print('running_corrects: '+str(running_corrects))
 
+
+                # print('model.model.features.conv0.weight[0][0][0]')
+                # print(model.model.features.conv0.weight[0][0][0])
+                # print('model.classifier3[0].weight[0][:5]')
+                # print(model.classifier3[0].weight[0][:5])
+                # print('model.classifier4[0].weight[0][:5]')
+                # print(model.classifier4[0].weight[0][:5])
+                # exit()
+
+            print('loss_       = %.5f' % loss_.data)
+            print('loss_cam    = %.5f' % loss_cam.data)
+            print('loss_wo_cam = %.5f' % loss_wo_cam.data)
+            print('loss_6cams[0]  = %.5f' % loss_6cams[0].data)
+            print('loss_6cams  = %s' % loss_6cams.data)
+            print('loss  = %s' % loss.data)
             epoch_loss = running_loss / dataset_sizes[phase]
             #epoch_acc = running_corrects / dataset_sizes[phase]
+
             if phase =='train':
                # epoch_acc = running_corrects / (dataset_sizes[phase]-4992)    # 4992 generated image in total
-                epoch_acc = float(running_corrects) / (dataset_sizes[phase]-generated_image_size)    # 4992 generated image in total
+                epoch_acc1 = float(running_corrects) / (dataset_sizes[phase]-generated_image_size)    # 4992 generated image in total
+                epoch_acc_cam = float(running_corrects_cam) / (dataset_sizes[phase]-generated_image_size)    # 4992 generated image in total
+                epoch_acc_wo_cam = float(running_corrects_wo_cam) / (dataset_sizes[phase]-generated_image_size)    # 4992 generated image in total
+                epoch_acc_6cams = float(running_corrects_6cams/(cam_end-cam_start)) / (dataset_sizes[phase]-generated_image_size)    # 4992 generated image in total
             else:
-                epoch_acc = float(running_corrects) / dataset_sizes[phase]
-                
+                epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
+                epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
+                epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
+                epoch_acc_6cams = float(running_corrects_6cams/(cam_end-cam_start)) / dataset_sizes[phase]
+            if refine:
+                epoch_acc = epoch_acc_6cams
+            else:
+                ratio_1 = 0.333
+                ratio_2 = 0.333
+                epoch_acc = epoch_acc1 * ratio_1 + epoch_acc_cam * ratio_2 + epoch_acc_wo_cam * (1-ratio_1-ratio_2)
+
+            print('acc_loss_  = %.5f' % epoch_acc1)
+            print('acc_cam    = %.5f' % epoch_acc_cam)
+            print('acc_wo_cam = %.5f' % epoch_acc_wo_cam)
+            print('acc_6cams  = %.5f' % epoch_acc_6cams)
+
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
             y_loss[phase].append(epoch_loss)
@@ -281,7 +411,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                     save_network(model, epoch)
             #    draw_curve(epoch)
 
-        print()
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -291,48 +420,38 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     # load best model weights
     model.load_state_dict(best_model_wts)
     save_network(model, 'best')
+    if not refine:
+        # print(model.model.features.conv0.weight[0][0])
+        torch.save(model, os.path.join('./model', name, 'whole_net_%s.pth' %'best'))
+        recovery_net = torch.load(os.path.join('./model', name, 'whole_net_%s.pth' % 'best'))
+        # print(recovery_net.model.features.conv0.weight[0][0])
+    else:
+        # print(model.model.features.conv0.weight[0][0])
+        torch.save(model, os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best'))
+        recovery_net = torch.load(os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best'))
+        # print(recovery_net.model.features.conv0.weight[0][0])
+
     return model
 
 
-######################################################################
-# Save model
-#---------------------------
-def save_network(network, epoch_label):
-    save_filename = 'net_%s.pth'% epoch_label
-    save_path = os.path.join('./model',name,save_filename)
-    torch.save(network.state_dict(), save_path)
-    # this step is important, or error occurs "runtimeError: tensors are on different GPUs" 
- #   if torch.cuda.is_available:   
- #       network.cuda(gpu_ids[0])
-    #if torch.cuda.is_available:   
-    #    network=nn.DataParallel(network,device_ids=[0,1,2]) # multi-GPU
-
 
 #print('------------'+str(len(clas_names))+'--------------')
-if opt.use_dense:
+if True:  #opt.use_dense:
     #print(len(class_names['train']))
-    model = ft_net_dense(751)    # 751 class for training data in market 1501 in total
+    model = ft_net_dense(751, 6, istrain=True)    # 751 class for training data in market 1501 in total
 else:
     model = ft_net(751)
 
+# model = load_network(model)
+print(model)
 if use_gpu:
     model = model.cuda()
 criterion = LSROloss()
 
-ignored_params = list(map(id, model.model.fc.parameters() )) + list(map(id, model.classifier.parameters() ))
-base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
-
-# Observe that all parameters are being optimized
-optimizer_ft = optim.SGD([
-             {'params': base_params, 'lr': 0.01},
-             {'params': model.model.fc.parameters(), 'lr': 0.05},
-             {'params': model.classifier.parameters(), 'lr': 0.05}
-         ], momentum=0.9, weight_decay=5e-4, nesterov=True)
 
 # model=nn.DataParallel(model,device_ids=[0,1,2]) # multi-GPU
 
 # Decay LR by a factor of 0.1 every 40 epochs
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=40, gamma=0.1)
 
 dir_name = os.path.join('./model',name)
 if not os.path.isdir(dir_name):
@@ -342,5 +461,35 @@ if not os.path.isdir(dir_name):
 with open('%s/opts.json'%dir_name,'w') as fp:
     json.dump(vars(opt), fp, indent=1)
 
+
+#False for train and refine
+#True for refine
+refine = False
+model = load_network(model)
+if not refine:
+    # for train
+    ignored_params = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \
+                     + list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
+                     + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+    base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
+    classifier_params = filter(lambda p: id(p) in ignored_params, model.parameters())
+    # Observe that all parameters are being optimized
+    lr_ratio = 1
+    optimizer_ft = optim.SGD([
+                 {'params': base_params, 'lr': 0.01*lr_ratio},
+                 {'params': classifier_params, 'lr': 0.05*lr_ratio}
+             ], momentum=0.9, weight_decay=5e-4, nesterov=True)
+
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=40, gamma=0.1)
+    model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+                       num_epochs=130, refine=False)
+
+#for refine
+model = load_network(model)
+refine_params = list(map(id, model.rf.parameters())) \
+                + list(map(id, model.fc3.parameters())) + list(map(id, model.classifier4.parameters()))
+second_stage_params = filter(lambda p: id(p) in refine_params, model.parameters())
+optimizer_ft = optim.SGD([{'params': second_stage_params, 'lr': 0.05}], momentum=0.9, weight_decay=5e-4, nesterov=True)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=10, gamma=0.2)
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=130)
+                    num_epochs=30, refine=True)
