@@ -141,7 +141,7 @@ class ClassBlock(nn.Module):
 class ft_net_dense(nn.Module):
     def __init__(self, class_num, cam_num=6, istrain=True):
         super(ft_net_dense, self).__init__()
-        dst_path = '/home/fly/Person-reid-GAN-pytorch/data/market1501/pytorch'
+        dst_path = 'data/market/pytorch'
         c = loadmat(os.path.join(dst_path, 'cam_features.mat'))
         self.cam_f_info = torch.from_numpy(c['cam_features']).cuda()
         self.class_num = class_num
