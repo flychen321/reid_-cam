@@ -224,7 +224,8 @@ class ft_net_dense(nn.Module):
                 result = torch.cat((result, temp.unsqueeze(0)), 0)
         if not self.istrain:
             result = result.transpose(0, 1)
-            result = result.contiguous().view(result.size(0), -1)
+            # result = result.contiguous().view(result.size(0), -1)
+            result = torch.mean(result, 1)
 
 
 

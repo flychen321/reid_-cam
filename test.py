@@ -74,9 +74,9 @@ data_transforms = transforms.Compose([
 
 
 data_dir = test_dir
-image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query','train_new']}
+image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=4) for x in ['gallery','query','train_new']}
+                                             shuffle=False, num_workers=4) for x in ['gallery','query']}
 
 class_names = image_datasets['query'].classes
 use_gpu = torch.cuda.is_available()
@@ -114,7 +114,7 @@ def extract_feature(model,dataloaders):
         count += n
       #  print(count)
         if opt.use_dense:
-            ff = torch.FloatTensor(n,1024*8).zero_()
+            ff = torch.FloatTensor(n,1024).zero_()
             # ff = torch.FloatTensor(n,2048).zero_()
         else:
             ff = torch.FloatTensor(n,2048).zero_()
@@ -127,10 +127,11 @@ def extract_feature(model,dataloaders):
             # f = torch.add(ratio * outputs[0].data.cpu(), (1-ratio) * outputs[2].data.cpu())
             # f = outputs[0].data.cpu()
             r1 = float(opt.ratio)/100.0
-            r2 = 0
-            # f = torch.cat((outputs[0].data.cpu(), r1*outputs[1].data.cpu(), r2*outputs[3].data.cpu()), 1)
-            # f = torch.sum((1.0-r1)*outputs[0].data.cpu(), r1*outputs[1].data.cpu())
-            f = torch.cat((outputs[0].data.cpu(), r1*outputs[1].data.cpu()), 1)
+            r2 = 0.8
+            # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
+            f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
+            # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
+            # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[2].data.cpu()), 1)
             ff = ff+f
         # norm feature
         fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)   # L2 normalize
@@ -158,11 +159,9 @@ def get_id(img_path):
 
 gallery_path = image_datasets['gallery'].imgs
 query_path = image_datasets['query'].imgs
-train_new_path = image_datasets['train_new'].imgs
 
 gallery_cam,gallery_label,gallery_files= get_id(gallery_path)
 query_cam,query_label,query_files = get_id(query_path)
-train_new_cam,train_new_label,train_new_files = get_id(train_new_path)
 ######################################################################
 # Load Collected data Trained model
 print('-------test-----------')
@@ -194,17 +193,14 @@ if use_gpu:
     model = model.cuda()
 
 # Extract feature
-train_new_feature = extract_feature(model,dataloaders['train_new'])
 gallery_feature = extract_feature(model,dataloaders['gallery'])
 query_feature = extract_feature(model,dataloaders['query'])
-print('len(train_new_feature) = %s' % len(train_new_feature))
 print('len(gallery_feature) = %s' % len(gallery_feature))
 print('len(query_feature) = %s' % len(query_feature))
 
 # Save to Matlab for check
 result = {'gallery_f':gallery_feature.numpy(),'gallery_label':gallery_label,'gallery_cam':gallery_cam,'gallery_files':gallery_files,
           'query_f':query_feature.numpy(),'query_label':query_label,'query_cam':query_cam,'query_files':query_files,
-'train_new_f':train_new_feature.numpy(),'train_new_label':train_new_label,'train_new_cam':train_new_cam,'train_new_files':train_new_files
           }
 
 scipy.io.savemat('pytorch_result.mat',result)
