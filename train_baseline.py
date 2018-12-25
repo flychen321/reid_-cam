@@ -299,7 +299,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=Tr
                 preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
                 # for i in range(outputs_6cams.shape[0]):
                 cam_start = 0
-                cam_end = 7
+                cam_end = 6
                 for i in range(cam_start, cam_end):
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
                     temp = criterion(outputs_6cams[i], labels, flags)
@@ -312,7 +312,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=Tr
                 # print('loss_wo_cam = %.5f' % loss_wo_cam.data)
                 # loss = loss_6cams[0] + loss_6cams[1] + loss_6cams[2] + loss_6cams[3] + loss_6cams[4] + loss_6cams[5] + loss_6cams[6]
                 if refine:
-                    r = 6
+                    r = 1
                     loss = (r * loss_6cams[0] + torch.sum(loss_6cams[1:])) / (len(loss_6cams))
                     # print('mid loss_6cams  = %s' % loss_6cams.data)
                 else:
@@ -459,7 +459,7 @@ with open('%s/opts.json' % dir_name, 'w') as fp:
 
 # False for train and refine
 # True for refine
-refine = False
+refine = True
 if not refine:
     # for train
     ignored_params = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \

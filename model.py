@@ -139,14 +139,15 @@ class ClassBlock(nn.Module):
 
 
 class ft_net_dense(nn.Module):
-    def __init__(self, class_num, cam_num=6, istrain=True):
+    def __init__(self, class_num, cam_num=6, istrain=True, ratio=0.65):
         super(ft_net_dense, self).__init__()
         dst_path = 'data/market/pytorch'
-        c = loadmat(os.path.join(dst_path, 'cam_features.mat'))
-        self.cam_f_info = torch.from_numpy(c['cam_features']).cuda()
+        c = np.load(os.path.join(dst_path, 'cam_features_no_norm.npy'))
+        self.cam_f_info = torch.from_numpy(c).cuda()
         self.class_num = class_num
         self.cam_num = cam_num
         self.istrain = istrain
+        self.ratio = ratio
         model_ft = models.densenet121(pretrained=True)
         # add pooling to the model
         # in the originial version, pooling is written in the forward function
@@ -183,7 +184,6 @@ class ft_net_dense(nn.Module):
         y = self.model2.fc(y)
         y = self.classifier2(y)
 
-        ratio = 0.65
         z_mid = feature_1 - feature_2
         # z = z.div(torch.norm(z, p=2, dim=1, keepdim=True).expand_as(z))
         z = self.fc(z_mid)
@@ -212,31 +212,20 @@ class ft_net_dense(nn.Module):
         #     temp = self.classifier4(temp)
         #     result = torch.cat((result, temp.unsqueeze(0)), 0)
 
-        r = 0.35
-        mid = feature_1 - r * feature_2   # for test  7cam
-        temp = feature_1 - r * feature_2
-        temp = self.rf(temp)
-        temp = self.fc3(temp)
-        temp = self.classifier4(temp)
-        result = temp.unsqueeze(0)
+        mid = feature_1 - self.ratio * feature_2   # for test  7cam
         for i in range(self.cam_num):
-            temp = mid + 0.35*self.cam_f_info[i]
+            temp = mid + self.ratio * self.cam_f_info[i].float()
             temp = self.rf(temp)
             temp = self.fc3(temp)
             temp = self.classifier4(temp)
-            result = torch.cat((result, temp.unsqueeze(0)), 0)
+            if i == 0:
+                result = temp.unsqueeze(0)
+            else:
+                result = torch.cat((result, temp.unsqueeze(0)), 0)
         if not self.istrain:
             result = result.transpose(0, 1)
             result = result.contiguous().view(result.size(0), -1)
 
-
-        # temp = feature_1 - 0.35*feature_2  # for test 1cam
-        # temp = self.rf(temp)
-        # temp = self.fc3(temp)
-        # result = self.classifier4(temp)
-
-
-        # result = torch.mean(result, 0)
 
 
         return x, y, z, result

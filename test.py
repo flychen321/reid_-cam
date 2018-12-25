@@ -85,39 +85,18 @@ use_gpu = torch.cuda.is_available()
 # Load model
 
 #----------single gpu training-----------------
-def load_network(network):
-    save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
-    network.load_state_dict(torch.load(save_path))
-    print(network.model.features.conv0.weight[0][0])
-
-    torch.save(network, os.path.join('./model',name,'whole_net_%s.pth'%opt.which_epoch))
-    torch.save(network.state_dict(), os.path.join('./model',name,'param_net_%s.pth'%opt.which_epoch))
-    recovery_net = torch.load(os.path.join('./model',name,'whole_net_%s.pth'%'best'))
-    print(recovery_net.model.features.conv0.weight[0][0])
+def load_network(model_structure):
+    save_path = os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best')
+    network = torch.load(save_path)
+    model_structure.load_state_dict(network.state_dict())
+    # print(network.model.features.conv0.weight[0][0])
+    # torch.save(network.state_dict(), os.path.join('./model',name,'whole_refine_param_%s.pth'%'best'))
+    # recovery_net = torch.load(os.path.join('./model',name,'whole_net_%s.pth'%'best'))
+    # print(recovery_net.model.features.conv0.weight[0][0])
     # exit()
-    return network
+    return model_structure
 
 
-#-----multi-gpu training---------
-# def load_network(network):
-#     save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
-#     state_dict = torch.load(save_path)
-#     # create new OrderedDict that does not contain `module.`
-#     from collections import OrderedDict
-#     new_state_dict = OrderedDict()
-#     for k, v in state_dict.items():
-#         namekey = k[7:] # remove `module.`
-#         new_state_dict[namekey] = v
-#     # load params
-#     network.load_state_dict(new_state_dict)
-#     return network
-
-######################################################################
-# Extract feature
-# ----------------------
-#
-# Extract feature from  a trained model.
-#
 def fliplr(img):
     '''flip horizontal'''
     inv_idx = torch.arange(img.size(3)-1,-1,-1).long()  # N x C x H x W
@@ -135,7 +114,7 @@ def extract_feature(model,dataloaders):
         count += n
       #  print(count)
         if opt.use_dense:
-            ff = torch.FloatTensor(n,1024*7).zero_()
+            ff = torch.FloatTensor(n,1024*8).zero_()
             # ff = torch.FloatTensor(n,2048).zero_()
         else:
             ff = torch.FloatTensor(n,2048).zero_()
@@ -144,15 +123,14 @@ def extract_feature(model,dataloaders):
                 img = fliplr(img)
             input_img = Variable(img.cuda())
             outputs = model(input_img)
-            # print(len(outputs))
-            # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu()), 1)
             ratio = float(opt.ratio)/100.0
             # f = torch.add(ratio * outputs[0].data.cpu(), (1-ratio) * outputs[2].data.cpu())
-            f = outputs[3].data.cpu()
-            # print(f.shape)
-            # print(f.__class__)
-            # print(f.size())
-            #print(f.size())
+            # f = outputs[0].data.cpu()
+            r1 = float(opt.ratio)/100.0
+            r2 = 0
+            # f = torch.cat((outputs[0].data.cpu(), r1*outputs[1].data.cpu(), r2*outputs[3].data.cpu()), 1)
+            # f = torch.sum((1.0-r1)*outputs[0].data.cpu(), r1*outputs[1].data.cpu())
+            f = torch.cat((outputs[0].data.cpu(), r1*outputs[1].data.cpu()), 1)
             ff = ff+f
         # norm feature
         fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)   # L2 normalize
@@ -192,6 +170,7 @@ if opt.use_dense:
     model_structure = ft_net_dense(751, istrain=False)
 else:
     model_structure = ft_net(751)
+# model = load_network(model_structure)
 model = load_network(model_structure)
 
 # Remove the final fc layer and classifier layer
