@@ -212,7 +212,7 @@ class ft_net_dense(nn.Module):
         #     temp = self.classifier4(temp)
         #     result = torch.cat((result, temp.unsqueeze(0)), 0)
 
-        mid = feature_1 - self.ratio * feature_2   # for test  7cam
+        mid = feature_1 - self.ratio * feature_2   # for test  6cam
         for i in range(self.cam_num):
             temp = mid + self.ratio * self.cam_f_info[i].float()
             temp = self.rf(temp)

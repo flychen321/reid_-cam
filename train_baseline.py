@@ -109,13 +109,7 @@ def save_network(network, epoch_label):
     save_filename = 'net_%s.pth' % epoch_label
     save_path = os.path.join('./model', name, save_filename)
     torch.save(network.state_dict(), save_path)
-    # this step is important, or error occurs "runtimeError: tensors are on different GPUs"
 
-
-#   if torch.cuda.is_available:
-#       network.cuda(gpu_ids[0])
-# if torch.cuda.is_available:
-#    network=nn.DataParallel(network,device_ids=[0,1,2]) # multi-GPU
 
 
 # read dcgan data
@@ -232,12 +226,13 @@ y_err['train'] = []
 y_err['val'] = []
 
 
-def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=True):
+def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, refine=True):
     since = time.time()
     best_model_wts = model.state_dict()
     best_acc = 0.0
 
     for epoch in range(num_epochs):
+        print('Stage = %s' % stage)
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
@@ -305,18 +300,23 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=Tr
                     temp = criterion(outputs_6cams[i], labels, flags)
                     # loss_6cams = loss_6cams + temp
                     loss_6cams[i] = temp
-                # _6cams, preds_6cams = torch.max(outputs_6cams.data, 1)
-                # loss_6cams = criterion(outputs_6cams, labels, flags)
-                # print('loss_       = %.5f' % loss_.data)
-                # print('loss_cam    = %.5f' % loss_cam.data)
-                # print('loss_wo_cam = %.5f' % loss_wo_cam.data)
-                # loss = loss_6cams[0] + loss_6cams[1] + loss_6cams[2] + loss_6cams[3] + loss_6cams[4] + loss_6cams[5] + loss_6cams[6]
-                if refine:
-                    r = 1
-                    loss = (r * loss_6cams[0] + torch.sum(loss_6cams[1:])) / (len(loss_6cams))
-                    # print('mid loss_6cams  = %s' % loss_6cams.data)
+
+                if stage == 1:
+                    loss = loss_
+                elif stage == 2:
+                    loss = loss_cam + loss_wo_cam
+                elif stage == 3:
+                    loss = torch.mean(loss_6cams)
                 else:
-                    loss = loss_ + loss_cam + loss_wo_cam
+                    print('stage = %d error!' % stage)
+                    exit()
+
+                # if refine:
+                #     r = 1
+                #     loss = (r * loss_6cams[0] + torch.sum(loss_6cams[1:])) / (len(loss_6cams))
+                #     # print('mid loss_6cams  = %s' % loss_6cams.data)
+                # else:
+                #     loss = loss_ + loss_cam + loss_wo_cam
 
                 # backward + optimize only if in training phase
                 if phase == 'train':
@@ -385,12 +385,25 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=Tr
                 epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
                 epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
                 epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
-            if refine:
+
+            if stage == 1:
+                epoch_acc = epoch_acc1
+            elif stage == 2:
+                r1 = 0.5
+                r2 = 0.5
+                epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo_cam
+            elif stage == 3:
                 epoch_acc = epoch_acc_6cams
             else:
-                ratio_1 = 0.333
-                ratio_2 = 0.333
-                epoch_acc = epoch_acc1 * ratio_1 + epoch_acc_cam * ratio_2 + epoch_acc_wo_cam * (1 - ratio_1 - ratio_2)
+                print('stage = %d error!' % stage)
+                exit()
+
+            # if refine:
+            #     epoch_acc = epoch_acc_6cams
+            # else:
+            #     ratio_1 = 0.333
+            #     ratio_2 = 0.333
+            #     epoch_acc = epoch_acc1 * ratio_1 + epoch_acc_cam * ratio_2 + epoch_acc_wo_cam * (1 - ratio_1 - ratio_2)
 
             print('acc_loss_  = %.5f' % epoch_acc1)
             print('acc_cam    = %.5f' % epoch_acc_cam)
@@ -418,16 +431,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, refine=Tr
     # load best model weights
     model.load_state_dict(best_model_wts)
     save_network(model, 'best')
-    if not refine:
-        # print(model.model.features.conv0.weight[0][0])
-        torch.save(model, os.path.join('./model', name, 'whole_net_%s.pth' % 'best'))
-        recovery_net = torch.load(os.path.join('./model', name, 'whole_net_%s.pth' % 'best'))
-        # print(recovery_net.model.features.conv0.weight[0][0])
-    else:
-        # print(model.model.features.conv0.weight[0][0])
-        torch.save(model, os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best'))
-        recovery_net = torch.load(os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best'))
-        # print(recovery_net.model.features.conv0.weight[0][0])
+    torch.save(model, os.path.join('./model', name, 'whole_net_%s.pth' % 'best'))
 
     return model
 
@@ -440,7 +444,7 @@ else:
     model = ft_net(751)
 
 # model = load_network(model)
-# print(model)
+print(model)
 if use_gpu:
     model = model.cuda()
 criterion = LSROloss()
@@ -457,43 +461,121 @@ if not os.path.isdir(dir_name):
 with open('%s/opts.json' % dir_name, 'w') as fp:
     json.dump(vars(opt), fp, indent=1)
 
-# False for train and refine
-# True for refine
-refine = True
-if not refine:
-    # for train
-    ignored_params = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \
-                     + list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
-                     + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
-    base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
-    classifier_params = filter(lambda p: id(p) in ignored_params, model.parameters())
-    # Observe that all parameters are being optimized
-    part_train = False
-    if part_train:
-        epoc = 35
-        lr_ratio = 0.1
-        step = 10
-        model = load_network(model)
-    else:
-        epoc = 130
-        lr_ratio = 1
-        step = 40
 
-    optimizer_ft = optim.SGD([
-        {'params': base_params, 'lr': 0.01 * lr_ratio},
-        {'params': classifier_params, 'lr': 0.05 * lr_ratio}
-    ], momentum=0.9, weight_decay=5e-4, nesterov=True)
+# print(len(list(map(id, model.model.parameters()))))
+# print(len(list(map(id, model.model2.parameters()))))
+# print(len(list(map(id, model.classifier.parameters()))))
+# print(len(list(map(id, model.classifier2.parameters()))))
+# print(len(list(map(id, model.classifier3.parameters()))))
+# print(len(list(map(id, model.classifier4.parameters()))))
+# print(len(list(map(id, model.fc.parameters()))))
+# print(len(list(map(id, model.fc3.parameters()))))
+# print(len(list(map(id, model.rf.parameters()))))
+# print(len(list(map(id, model.parameters()))))
 
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
-    model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                        num_epochs=epoc, refine=False)
+stage_1_id = list(map(id, model.model.parameters())) + list(map(id, model.classifier.parameters()))
+stage_1_classifier_id = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters()))
+stage_1_base_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_classifier_id, model.parameters())
+stage_1_classifier_params = filter(lambda p: id(p) in stage_1_classifier_id, model.parameters())
 
-# for refine
-model = load_network(model)
-refine_params = list(map(id, model.rf.parameters())) \
-                + list(map(id, model.fc3.parameters())) + list(map(id, model.classifier4.parameters()))
-second_stage_params = filter(lambda p: id(p) in refine_params, model.parameters())
-optimizer_ft = optim.SGD([{'params': second_stage_params, 'lr': 0.05}], momentum=0.9, weight_decay=5e-4, nesterov=True)
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=10, gamma=0.2)
+stage_2_id = list(map(id, model.model2.parameters())) + list(map(id, model.classifier2.parameters())) \
+             + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
+             + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
+stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
+
+stage_3_id = list(map(id, model.rf.parameters())) + list(map(id, model.fc3.parameters())) \
+            + list(map(id, model.classifier4.parameters()))
+stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
+
+
+epoc = 130
+lr_ratio = 1
+step = 40
+optimizer_ft = optim.SGD([
+    {'params': stage_1_base_params, 'lr': 0.01 * lr_ratio},
+    {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
+    {'params': stage_2_base_params, 'lr': 0},
+    {'params': stage_2_classifier_params, 'lr': 0},
+    {'params': stage_3_params, 'lr': 0},
+], momentum=0.9, weight_decay=5e-4, nesterov=True)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                    num_epochs=35, refine=True)
+                    num_epochs=epoc, stage=1, refine=False)
+
+epoc = 130
+lr_ratio = 1
+step = 40
+optimizer_ft = optim.SGD([
+    {'params': stage_1_base_params, 'lr': 0},
+    {'params': stage_1_classifier_params, 'lr': 0},
+    {'params': stage_2_base_params, 'lr': 0.01 * lr_ratio},
+    {'params': stage_2_classifier_params, 'lr': 0.05 * lr_ratio},
+    {'params': stage_3_params, 'lr': 0},
+], momentum=0.9, weight_decay=5e-4, nesterov=True)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
+model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+                    num_epochs=epoc, stage=2, refine=False)
+
+epoc = 35
+lr_ratio = 1
+step = 10
+optimizer_ft = optim.SGD([
+    {'params': stage_1_base_params, 'lr': 0},
+    {'params': stage_1_classifier_params, 'lr': 0},
+    {'params': stage_2_base_params, 'lr': 0},
+    {'params': stage_2_classifier_params, 'lr': 0},
+    {'params': stage_3_params, 'lr': 0.05 * lr_ratio},
+], momentum=0.9, weight_decay=5e-4, nesterov=True)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
+model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+                    num_epochs=epoc, stage=3, refine=False)
+
+
+# print(len(list(map(id, model.classifier.parameters()))))
+# print(list(map(id, model.classifier.parameters())))
+# print(model.classifier.parameters())
+# for p in model.classifier.parameters():
+#     print(p)
+# exit()
+# # False for train and refine
+# # True for refine
+# refine = False
+# if not refine:
+#     # for train
+#     ignored_params = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \
+#                      + list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
+#                      + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+#     base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
+#     classifier_params = filter(lambda p: id(p) in ignored_params, model.parameters())
+#     # Observe that all parameters are being optimized
+#     part_train = False
+#     if part_train:
+#         epoc = 35
+#         lr_ratio = 0.1
+#         step = 10
+#         model = load_network(model)
+#     else:
+#         epoc = 130
+#         lr_ratio = 1
+#         step = 40
+#
+#     optimizer_ft = optim.SGD([
+#         {'params': base_params, 'lr': 0.01 * lr_ratio},
+#         {'params': classifier_params, 'lr': 0.05 * lr_ratio}
+#     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
+#
+#     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
+#     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+#                         num_epochs=epoc, refine=False)
+#
+# # for refine
+# model = load_network(model)
+# refine_params = list(map(id, model.rf.parameters())) \
+#                 + list(map(id, model.fc3.parameters())) + list(map(id, model.classifier4.parameters()))
+# second_stage_params = filter(lambda p: id(p) in refine_params, model.parameters())
+# optimizer_ft = optim.SGD([{'params': second_stage_params, 'lr': 0.05}], momentum=0.9, weight_decay=5e-4, nesterov=True)
+# exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=10, gamma=0.2)
+# model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+#                     num_epochs=35, refine=True)
