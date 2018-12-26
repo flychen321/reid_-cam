@@ -102,6 +102,12 @@ def load_network(network):
     return network
 
 
+def load_network_easy(network):
+    save_path = os.path.join('./model', name, 'net_best.pth')
+    network.load_state_dict(torch.load(save_path))
+    return network
+
+
 ######################################################################
 # Save model
 # ---------------------------
@@ -109,7 +115,6 @@ def save_network(network, epoch_label):
     save_filename = 'net_%s.pth' % epoch_label
     save_path = os.path.join('./model', name, save_filename)
     torch.save(network.state_dict(), save_path)
-
 
 
 # read dcgan data
@@ -136,7 +141,6 @@ class dcganDataset(Dataset):
                 self.img_label_cam.append(int(files[6]) - 1)
                 self.img_flag.append(0)
                 self.samples.append(temp)
-
 
     def __len__(self):
         return len(self.samples)
@@ -297,9 +301,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 cam_end = 6
                 for i in range(cam_start, cam_end):
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
-                    temp = criterion(outputs_6cams[i], labels, flags)
-                    # loss_6cams = loss_6cams + temp
-                    loss_6cams[i] = temp
+                    loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
                     loss = loss_
@@ -307,6 +309,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss = loss_cam + loss_wo_cam
                 elif stage == 3:
                     loss = torch.mean(loss_6cams)
+                elif stage == 12:
+                    loss = loss_ + loss_cam + loss_wo_cam
                 else:
                     print('stage = %d error!' % stage)
                     exit()
@@ -346,7 +350,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 running_corrects += torch.sum(preds == labels.data)
                 running_corrects_cam += torch.sum(preds_cam == labels_cam.data)
                 running_corrects_wo_cam += torch.sum(preds_wo_cam == labels.data)
-                # for i in range(6):
+
                 for i in range(cam_start, cam_end):
                     running_corrects_6cams += torch.sum(preds_6cams[i] == labels.data)
                 # print('acc = %.5f' % (float(running_corrects_6cams) / (dataset_sizes[phase]-generated_image_size)))
@@ -368,23 +372,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             print('loss_6cams  = %s' % loss_6cams.data)
             print('loss  = %s' % loss.data)
             epoch_loss = running_loss / dataset_sizes[phase]
-            # epoch_acc = running_corrects / dataset_sizes[phase]
 
-            if phase == 'train':
-                # epoch_acc = running_corrects / (dataset_sizes[phase]-4992)    # 4992 generated image in total
-                epoch_acc1 = float(running_corrects) / (
-                            dataset_sizes[phase] - generated_image_size)  # 4992 generated image in total
-                epoch_acc_cam = float(running_corrects_cam) / (
-                            dataset_sizes[phase] - generated_image_size)  # 4992 generated image in total
-                epoch_acc_wo_cam = float(running_corrects_wo_cam) / (
-                            dataset_sizes[phase] - generated_image_size)  # 4992 generated image in total
-                epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / (
-                            dataset_sizes[phase] - generated_image_size)  # 4992 generated image in total
-            else:
-                epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
-                epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
-                epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
-                epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
+            epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
+            epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
+            epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
+            epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if stage == 1:
                 epoch_acc = epoch_acc1
@@ -394,6 +386,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo_cam
             elif stage == 3:
                 epoch_acc = epoch_acc_6cams
+            elif stage == 12:
+                r1 = 0.34
+                r2 = 0.33
+                r3 = 0.33
+                epoch_acc = r1 * epoch_acc1 + r2 * epoch_acc_cam + r3 * epoch_acc_wo_cam
             else:
                 print('stage = %d error!' % stage)
                 exit()
@@ -431,7 +428,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
     # load best model weights
     model.load_state_dict(best_model_wts)
     save_network(model, 'best')
-    torch.save(model, os.path.join('./model', name, 'whole_net_%s.pth' % 'best'))
+    save_network(model, 'best' + '_stage_' + str(stage))
+    torch.save(model, os.path.join('./model', name, 'whole_net_best.pth'))
+    torch.save(model, os.path.join('./model', name, 'whole_net_best' + '_stage_' + str(stage)) + '.pth')
 
     return model
 
@@ -461,7 +460,6 @@ if not os.path.isdir(dir_name):
 with open('%s/opts.json' % dir_name, 'w') as fp:
     json.dump(vars(opt), fp, indent=1)
 
-
 # print(len(list(map(id, model.model.parameters()))))
 # print(len(list(map(id, model.model2.parameters()))))
 # print(len(list(map(id, model.classifier.parameters()))))
@@ -481,18 +479,17 @@ stage_1_classifier_params = filter(lambda p: id(p) in stage_1_classifier_id, mod
 stage_2_id = list(map(id, model.model2.parameters())) + list(map(id, model.classifier2.parameters())) \
              + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
 stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
-             + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+                        + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
 stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
 stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
 
 stage_3_id = list(map(id, model.rf.parameters())) + list(map(id, model.fc3.parameters())) \
-            + list(map(id, model.classifier4.parameters()))
+             + list(map(id, model.classifier4.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
-
+model = load_network_easy(model)
 epoc = 130
 lr_ratio = 1
-step = 40
 optimizer_ft = optim.SGD([
     {'params': stage_1_base_params, 'lr': 0.01 * lr_ratio},
     {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
@@ -504,6 +501,7 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                     num_epochs=epoc, stage=1, refine=False)
 
+# model = load_network_easy(model)
 epoc = 130
 lr_ratio = 1
 step = 40
@@ -518,6 +516,7 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                     num_epochs=epoc, stage=2, refine=False)
 
+# model = load_network_easy(model)
 epoc = 35
 lr_ratio = 1
 step = 10
@@ -531,7 +530,6 @@ optimizer_ft = optim.SGD([
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                     num_epochs=epoc, stage=3, refine=False)
-
 
 # print(len(list(map(id, model.classifier.parameters()))))
 # print(list(map(id, model.classifier.parameters())))

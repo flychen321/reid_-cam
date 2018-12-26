@@ -28,7 +28,7 @@ parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help=
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
-parser.add_argument('--ratio', default=65, type=str, help='ratio')
+parser.add_argument('--ratio', default=80, type=str, help='ratio')
 
 opt = parser.parse_args()
 opt.use_dense = True
@@ -96,6 +96,10 @@ def load_network(model_structure):
     # exit()
     return model_structure
 
+def load_network_easy(network):
+    save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
+    network.load_state_dict(torch.load(save_path))
+    return network
 
 def fliplr(img):
     '''flip horizontal'''
@@ -129,7 +133,8 @@ def extract_feature(model,dataloaders):
             r1 = float(opt.ratio)/100.0
             r2 = 0.8
             # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
-            f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
+            # f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
+            f = outputs[0].data.cpu()
             # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
             # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[2].data.cpu()), 1)
             ff = ff+f
@@ -170,7 +175,7 @@ if opt.use_dense:
 else:
     model_structure = ft_net(751)
 # model = load_network(model_structure)
-model = load_network(model_structure)
+model = load_network_easy(model_structure)
 
 # Remove the final fc layer and classifier layer
 # model.model.fc = nn.Sequential()
