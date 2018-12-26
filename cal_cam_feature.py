@@ -24,7 +24,7 @@ import glob
 ######################################################################
 # Options
 # --------
-parser = argparse.ArgumentParser(description='Training')
+parser = argparse.ArgumentParser(description='calculating')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
@@ -32,9 +32,11 @@ parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 parser.add_argument('--ratio', default=65, type=str, help='ratio')
+parser.add_argument('--modelname', default='cal_name', type=str, help='save model name')
 
 opt = parser.parse_args()
 opt.use_dense = True
+print('modelname in cal_cam_features= %s' % opt.modelname)
 print('ratio = %.3f' % (float(opt.ratio)/100.0))
 #str_ids = opt.gpu_ids.split(',')
 #which_epoch = opt.which_epoch
@@ -72,6 +74,10 @@ def load_network(network):
     # exit()
     return network
 
+def load_network_easy(network):
+    save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
+    network.load_state_dict(torch.load(save_path))
+    return network
 
 def fliplr(img):
     '''flip horizontal'''
@@ -103,73 +109,54 @@ def extract_one_feature(path, model):
     # print('n=%s   c=%s   h=%s   w=%s    len(features) = %s' % (n,c,h,w, len(features)))
     return features, label
 
-# def get_one_softlabel(path, model=model):
-#     input_image = Image.open(path)
-#     file = os.path.split(path)[-1]
-#     input_image = data_transforms['val'](input_image)
-#     input_image = torch.unsqueeze(input_image, 0)
-#     if use_gpu:
-#         input_image = input_image.cuda()
-#     outputs = model(input_image)
-#     outputs = outputs[2]
-#     pred_label = torch.squeeze(outputs)
-#     hard_label = torch.argmax(pred_label, 0)
-#     soft_label = F.softmax(pred_label, 0)
-#     soft_label = soft_label.detach().cpu().numpy()
-#
-#
-#     return soft_label, hard_label
+def cal_camfeatures(src_path = 'data/market/pytorch/train_all', dst_path = 'data/market/pytorch'):
+    print('-------cal cam features-----------')
+    if opt.use_dense:
+        model_structure = ft_net_dense(751, istrain=False)
+    else:
+        model_structure = ft_net(751)
+    model = load_network_easy(model_structure)
 
-######################################################################
-# Load Collected data Trained model
-print('-------test-----------')
-if opt.use_dense:
-    model_structure = ft_net_dense(751, istrain=False)
-else:
-    model_structure = ft_net(751)
-model = load_network(model_structure)
+    # Remove the final fc layer and classifier layer
+    model.model.fc = nn.Sequential()
+    model.classifier = nn.Sequential()
+    model.model2.fc = nn.Sequential()
+    model.classifier2 = nn.Sequential()
+    model.fc = nn.Sequential()
+    model.classifier3 = nn.Sequential()
+    model.fc3 = nn.Sequential()
+    model.classifier4 = nn.Sequential()
 
-# Remove the final fc layer and classifier layer
-model.model.fc = nn.Sequential()
-model.classifier = nn.Sequential()
-model.model2.fc = nn.Sequential()
-model.classifier2 = nn.Sequential()
-model.fc = nn.Sequential()
-model.classifier3 = nn.Sequential()
-model.fc3 = nn.Sequential()
-model.classifier4 = nn.Sequential()
+    # Change to test mode
+    model = model.eval()
+    if use_gpu:
+        model = model.cuda()
 
-# Change to test mode
-model = model.eval()
-if use_gpu:
-    model = model.cuda()
+    files = glob.glob(src_path + '/*/*.jpg')
+    print(len(files))
+    cam_feature = np.zeros((6, 1024))
+    cam_cnt = np.zeros((6,))
+    cnt = 0
+    for file in files:
+        feature, label = extract_one_feature(file, model)
+        cam_feature[label] += feature
+        cam_cnt[label] += 1
+        if (cnt + 1) % 1000 == 0:
+            print('cnt = %d' % (cnt + 1))
+            # break
+        cnt += 1
 
-src_path = 'data/market/pytorch/train_all'
-files = glob.glob(src_path+'/*/*.jpg')
-print(len(files))
-cam_num = 6
-cam_feature = np.zeros((6, 1024))
-cam_cnt = np.zeros((6,))
-cnt = 0
-for file in files:
-    feature, label = extract_one_feature(file, model)
-    cam_feature[label] += feature
-    cam_cnt[label] += 1
-    if (cnt+1) % 1000 == 0:
-        print('cnt = %d' % cnt)
-        # break
-    cnt += 1
+    for i in range(6):
+        cam_feature[i] /= cam_cnt[i]
+        print('cam_cnt_%d = %4d  cam_feature_%d = %s' % (i, cam_cnt[i], i, cam_feature[i]))
+        print('sum = %.3f' % (np.sum(cam_feature[i])))
+        print('max = %.5f  index = %4d' % (np.max(cam_feature[i]), np.argmax(cam_feature[i])))
+        print('min = %.5f  index = %4d' % (np.min(cam_feature[i]), np.argmin(cam_feature[i])))
 
-for i in range(6):
-    cam_feature[i] /= cam_cnt[i]
-    print('cam_cnt_%d = %4d  cam_feature_%d = %s' % (i, cam_cnt[i], i, cam_feature[i]))
-    print('sum = %.3f' % (np.sum(cam_feature[i])))
-    print('max = %.5f  index = %4d' % (np.max(cam_feature[i]), np.argmax(cam_feature[i])))
-    print('min = %.5f  index = %4d' % (np.min(cam_feature[i]), np.argmin(cam_feature[i])))
+    np.save(os.path.join(dst_path, 'cam_features_no_norm1.npy'), cam_feature)
+    f = np.load(os.path.join(dst_path, 'cam_features_no_norm1.npy'))
+    print('cam features:')
+    print(f)
 
-dst_path = 'data/market/pytorch'
-c = np.save(os.path.join(dst_path, 'cam_features_no_norm.npy'), cam_feature)
-f = np.load(os.path.join(dst_path, 'cam_features_no_norm.npy'))
-print(f)
-
-
+if __name__ == '__main__':
+    cal_camfeatures()

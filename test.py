@@ -26,7 +26,7 @@ parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
-parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 parser.add_argument('--ratio', default=80, type=str, help='ratio')
 
