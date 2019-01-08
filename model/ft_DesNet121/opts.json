@@ -4,5 +4,5 @@
  "batchsize": 32,
  "erasing_p": 0.8,
  "use_dense": true,
- "modelname": "prob_4"
+ "modelname": "fly"
 }

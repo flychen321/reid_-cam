@@ -105,8 +105,10 @@ def load_network(network):
 
 
 def load_network_easy(network):
-    print('load pretrained model: %s' % os.path.join('./model', name, 'net_best.pth'))
-    save_path = os.path.join('./model', name, 'net_best.pth')
+    # save_path = os.path.join('./model', name, 'net_best.pth')
+    # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22_rer94.18_m91.23.pth'
+    save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
+    print('load pretrained model: %s' % save_path)
     network.load_state_dict(torch.load(save_path))
     return network
 
@@ -464,19 +466,22 @@ stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(i
 stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
 stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
 
-stage_3_id = list(map(id, model.rf.parameters())) + list(map(id, model.fc3.parameters())) \
+stage_3_id = list(map(id, model.mask0.parameters())) + list(map(id, model.mask1.parameters())) \
+             + list(map(id, model.mask2.parameters())) + list(map(id, model.mask3.parameters())) \
+             + list(map(id, model.mask4.parameters())) + list(map(id, model.mask5.parameters())) \
+             + list(map(id, model.rf.parameters())) + list(map(id, model.fc3.parameters())) \
              + list(map(id, model.classifier4.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
-stage_1_train = True
+stage_1_train = False
 stage_2_train = False
-stage_3_train = False
+stage_3_train = True
 
 if stage_1_train:
-    # model = load_network_easy(model)
-    epoc = 130
-    lr_ratio = 1
-    step = 40
+    model = load_network_easy(model)
+    epoc = 35
+    lr_ratio = 0.1
+    step = 10
     optimizer_ft = optim.SGD([
         {'params': stage_1_base_params, 'lr': 0.01 * lr_ratio},
         {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
@@ -504,11 +509,11 @@ if stage_2_train:
                         num_epochs=epoc, stage=2)
 
 if stage_3_train:
-    model = load_network_easy(model)
-    cal_camfeatures()
-    epoc = 35
+    model = load_network(model)
+    # cal_camfeatures()
+    epoc = 20
     lr_ratio = 1
-    step = 10
+    step = 6
     optimizer_ft = optim.SGD([
         {'params': stage_1_base_params, 'lr': 0},
         {'params': stage_1_classifier_params, 'lr': 0},

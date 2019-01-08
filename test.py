@@ -26,7 +26,7 @@ parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
-parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 parser.add_argument('--ratio', default=80, type=str, help='ratio')
 
@@ -97,7 +97,11 @@ def load_network(model_structure):
     return model_structure
 
 def load_network_easy(network):
-    save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
+    save_path = os.path.join('./model', name, 'net_best.pth')
+    # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22.pth'
+    # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
+    # save_path = 'model/model_backup/sperate/net_best_stage_3.pth'
+    print('load pretrained model: %s' % save_path)
     network.load_state_dict(torch.load(save_path))
     return network
 
@@ -131,12 +135,14 @@ def extract_feature(model,dataloaders):
             # f = torch.add(ratio * outputs[0].data.cpu(), (1-ratio) * outputs[2].data.cpu())
             # f = outputs[0].data.cpu()
             r1 = float(opt.ratio)/100.0
+            r1 = 0.5
             r2 = 0.8
             # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
             # f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
-            f = outputs[0].data.cpu()
+            f = outputs[2].data.cpu()
             # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
             # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[2].data.cpu()), 1)
+            # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[3].data.cpu()), 1)
             ff = ff+f
         # norm feature
         fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)   # L2 normalize
