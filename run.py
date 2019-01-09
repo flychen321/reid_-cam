@@ -9,7 +9,11 @@ for i in np.arange(10):
     cmd = 'python train_baseline.py --use_dense  --modelname ' + 'prob_' + str(i)  + ' >> ' + log_name
     print('cmd = %s' % cmd)
     os.system(cmd)
-    os.system('python test.py  --use_dense  --ratio ' + str(i) + ' >>  ' + log_name)
+    os.system('python test.py  --use_dense  --ratio ' + str(0) + ' >>  ' + log_name)
+    os.system('python evaluate.py' + ' >> ' + log_name)
+    os.system('python evaluate_rerank.py' + ' >> ' + log_name)
+
+    os.system('python test.py  --use_dense  --ratio ' + str(40) + ' >>  ' + log_name)
     os.system('python evaluate.py' + ' >> ' + log_name)
     os.system('python evaluate_rerank.py' + ' >> ' + log_name)
 

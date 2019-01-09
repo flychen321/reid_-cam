@@ -139,7 +139,7 @@ def extract_feature(model,dataloaders):
             r2 = 0.8
             # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
             # f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
-            f = outputs[2].data.cpu()
+            f = outputs[int(opt.ratio/10)].data.cpu()
             # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
             # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[2].data.cpu()), 1)
             # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[3].data.cpu()), 1)

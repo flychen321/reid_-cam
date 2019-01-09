@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -358,6 +358,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     running_corrects_6cams += torch.sum(preds_6cams[i] == labels.data)
 
             print('loss_       = %.5f' % loss_.data)
+            print('pre_loss_   = %.5f' % pre_loss_.data)
             print('loss_cam    = %.5f' % loss_cam.data)
             print('loss_wo_cam = %.5f' % loss_wo_cam.data)
             print('loss_6cams[0]  = %.5f' % loss_6cams[0].data)
@@ -365,13 +366,14 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             print('loss  = %s' % loss.data)
             epoch_loss = running_loss / dataset_sizes[phase]
 
-            epoch_acc1 = float(running_corrects + running_corrects_pre) / dataset_sizes[phase] / 2
+            epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
+            epoch_acc_pre = float(running_corrects_pre) / dataset_sizes[phase]
             epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
             epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if stage == 1:
-                epoch_acc = epoch_acc1
+                epoch_acc = (epoch_acc1 + epoch_acc_pre) / 2.0
             elif stage == 2:
                 r1 = 0.5
                 r2 = 0.5
@@ -388,10 +390,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 exit()
 
 
-            print('acc_loss_  = %.5f' % epoch_acc1)
-            print('acc_cam    = %.5f' % epoch_acc_cam)
-            print('acc_wo_cam = %.5f' % epoch_acc_wo_cam)
-            print('acc_6cams  = %.5f' % epoch_acc_6cams)
+            print('acc_loss_      =  %.5f' % epoch_acc1)
+            print('epoch_acc_pre  =  %.5f' % epoch_acc_pre)
+            print('acc_cam        =  %.5f' % epoch_acc_cam)
+            print('acc_wo_cam     =  %.5f' % epoch_acc_wo_cam)
+            print('acc_6cams      =  %.5f' % epoch_acc_6cams)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -432,7 +435,7 @@ if True:  # opt.use_dense:
 else:
     model = ft_net(751)
 
-print(model)
+# print(model)
 if use_gpu:
     model = model.cuda()
 criterion = LSROloss()
