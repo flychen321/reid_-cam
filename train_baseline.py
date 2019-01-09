@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -256,6 +256,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
             running_loss = 0.0
             running_corrects = 0
+            running_corrects_pre = 0
             running_corrects_cam = 0
             running_corrects_wo_cam = 0
             running_corrects_6cams = 0
@@ -291,12 +292,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 outputs_cam = result[1]
                 outputs_wo_cam = result[2]
                 outputs_6cams = result[3]
+                pre_outputs = result[4]
                 _, preds = torch.max(outputs.data, 1)  # outputs.data  return the index of the biggest value in each row
+                _, pre_preds = torch.max(pre_outputs.data, 1)  # outputs.data  return the index of the biggest value in each row
                 _cam, preds_cam = torch.max(outputs_cam.data,
                                             1)  # outputs.data  return the index of the biggest value in each row
                 _wo_cam, preds_wo_cam = torch.max(outputs_wo_cam.data,
                                                   1)  # outputs.data  return the index of the biggest value in each row
                 loss_ = criterion(outputs, labels, flags)
+                pre_loss_ = criterion(pre_outputs, labels, flags)
                 loss_cam = criterion(outputs_cam, labels_cam, flags)
                 loss_wo_cam = criterion(outputs_wo_cam, labels, flags)
                 # loss_6cams = 0
@@ -310,7 +314,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
-                    loss = loss_
+                    loss = loss_ + pre_loss_
                 elif stage == 2:
                     loss = loss_cam + loss_wo_cam
                 elif stage == 3:
@@ -346,6 +350,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                             preds_6cams[i][temp] = -1
 
                 running_corrects += torch.sum(preds == labels.data)
+                running_corrects_pre += torch.sum(pre_preds == labels.data)
                 running_corrects_cam += torch.sum(preds_cam == labels_cam.data)
                 running_corrects_wo_cam += torch.sum(preds_wo_cam == labels.data)
 
@@ -360,7 +365,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             print('loss  = %s' % loss.data)
             epoch_loss = running_loss / dataset_sizes[phase]
 
-            epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
+            epoch_acc1 = float(running_corrects + running_corrects_pre) / dataset_sizes[phase] / 2
             epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
             epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
@@ -427,7 +432,7 @@ if True:  # opt.use_dense:
 else:
     model = ft_net(751)
 
-# print(model)
+print(model)
 if use_gpu:
     model = model.cuda()
 criterion = LSROloss()
@@ -455,7 +460,8 @@ with open('%s/opts.json' % dir_name, 'w') as fp:
 # print(len(list(map(id, model.parameters()))))
 
 stage_1_id = list(map(id, model.model.parameters())) + list(map(id, model.classifier.parameters()))
-stage_1_classifier_id = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters()))
+stage_1_classifier_id = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \
+                        + list(map(id, model.model.pre_fc.parameters())) + list(map(id, model.pre_classifier.parameters()))
 stage_1_base_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_classifier_id, model.parameters())
 stage_1_classifier_params = filter(lambda p: id(p) in stage_1_classifier_id, model.parameters())
 
@@ -473,15 +479,15 @@ stage_3_id = list(map(id, model.mask0.parameters())) + list(map(id, model.mask1.
              + list(map(id, model.classifier4.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
-stage_1_train = False
+stage_1_train = True
 stage_2_train = False
-stage_3_train = True
+stage_3_train = False
 
 if stage_1_train:
-    model = load_network_easy(model)
-    epoc = 35
-    lr_ratio = 0.1
-    step = 10
+    # model = load_network_easy(model)
+    epoc = 130
+    lr_ratio = 1
+    step = 40
     optimizer_ft = optim.SGD([
         {'params': stage_1_base_params, 'lr': 0.01 * lr_ratio},
         {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},

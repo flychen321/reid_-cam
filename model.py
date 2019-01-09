@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import init
 from torchvision import models
 from torch.autograd import Variable
@@ -175,8 +176,10 @@ class ft_net_dense(nn.Module):
         # in the originial version, pooling is written in the forward function
         model_ft.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         model_ft.fc = FcBlock()
+        model_ft.pre_fc = FcBlock()
         self.model = model_ft
         self.classifier = ClassBlock()
+        self.pre_classifier = ClassBlock()
         model_ft2 = models.densenet121(pretrained=True)
         model_ft2.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         model_ft2.fc = FcBlock()
@@ -196,7 +199,29 @@ class ft_net_dense(nn.Module):
 
     def forward(self, x):
         temp = x
-        x = self.model.features(x)
+        t = self.model.features.conv0(temp)
+        t = self.model.features.norm0(t)
+        t = self.model.features.relu0(t)
+        t = self.model.features.pool0(t)
+        t = self.model.features.denseblock1(t)
+        t = self.model.features.transition1(t)
+        t = self.model.features.denseblock2(t)
+        t = self.model.features.transition2(t)
+
+        t2 = t
+        t2 = F.adaptive_avg_pool2d(t2, output_size=(2, 2))
+        t2 = t2.view(t.size(0), -1)
+        t2 = self.model.pre_fc(t2)
+        t2 = self.pre_classifier(t2)
+
+        t = self.model.features.denseblock3(t)
+        t = self.model.features.transition3(t)
+        t = self.model.features.denseblock4(t)
+        t = self.model.features.norm5(t)
+        t = self.model.features.avgpool(t)
+
+        x = t
+        # x = self.model.features(x)
         x = x.view(x.size(0), -1)
         # x = x.div(torch.norm(x, p=2, dim=1, keepdim=True).expand_as(x))
         feature_1 = x
@@ -266,7 +291,7 @@ class ft_net_dense(nn.Module):
             result = result.contiguous().view(result.size(0), -1)
             # result = torch.mean(result, 1)
 
-        return x, y, z, result
+        return x, y, z, result, t2
 
 
 '''
