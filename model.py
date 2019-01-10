@@ -148,7 +148,7 @@ class ClassBlock(nn.Module):
 
 
 class MaskBlock(nn.Module):
-    def __init__(self, input_dim=1, output_dim=1, kernel_size=1):
+    def __init__(self, input_dim=1024, output_dim=1024, kernel_size=1):
         super(MaskBlock, self).__init__()
         masker = []
         masker += [nn.Conv2d(input_dim, output_dim, kernel_size=kernel_size, stride=1, padding=0, bias=True)]
@@ -183,7 +183,7 @@ class ft_net_dense(nn.Module):
         model_ft2 = models.densenet121(pretrained=True)
         model_ft2.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         model_ft2.fc = FcBlock()
-        model_ft2.rf = ReFineBlock(layer=1)
+        model_ft2.rf = MaskBlock()
         self.model2 = model_ft2
         self.classifier2 = ClassBlock(class_num=self.cam_num)
         self.fc = FcBlock()
@@ -233,7 +233,9 @@ class ft_net_dense(nn.Module):
         y = y.view(y.size(0), -1)
         # y = y.div(torch.norm(y, p=2, dim=1, keepdim=True).expand_as(y))
         feature_2 = y
-        feature_cam = self.model2.rf(feature_2)
+        feature_cam = feature_2.unsqueeze(-1).unsqueeze(-1)
+        feature_cam = self.model2.rf(feature_cam)
+        feature_cam = feature_cam.squeeze()
         y = self.model2.fc(y)
         y = self.classifier2(y)
 
