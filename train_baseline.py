@@ -91,7 +91,7 @@ data_transforms = {
 
 
 def load_network(network):
-    save_path = os.path.join('./model', name, 'whole_net_%s.pth' % 'best')
+    save_path = 'model/model_backup/sperate/whole_net_best_stage_3.pth'
     net_original = torch.load(save_path)
     # print(net_original.model.features.conv0.weight[0][0])
     pretrained_dict = net_original.state_dict()
@@ -470,7 +470,8 @@ stage_1_classifier_params = filter(lambda p: id(p) in stage_1_classifier_id, mod
 
 stage_2_id = list(map(id, model.model2.parameters())) + list(map(id, model.classifier2.parameters())) \
              + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
-stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.classifier2.parameters())) \
+stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.model2.rf.parameters())) \
+                        + list(map(id, model.classifier2.parameters())) \
                         + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
 stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
 stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
@@ -482,8 +483,8 @@ stage_3_id = list(map(id, model.mask0.parameters())) + list(map(id, model.mask1.
              + list(map(id, model.classifier4.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
-stage_1_train = True
-stage_2_train = False
+stage_1_train = False
+stage_2_train = True
 stage_3_train = False
 
 if stage_1_train:
@@ -502,7 +503,7 @@ if stage_1_train:
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=1)
 if stage_2_train:
-    model = load_network_easy(model)
+    model = load_network(model)
     epoc = 130
     lr_ratio = 1
     step = 40
