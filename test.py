@@ -122,8 +122,12 @@ def extract_feature(model,dataloaders):
         count += n
       #  print(count)
         if opt.use_dense:
-            ff = torch.FloatTensor(n,1024*2).zero_()
-            # ff = torch.FloatTensor(n,2048).zero_()
+            if float(opt.ratio) < 5:
+                ff = torch.FloatTensor(n, 1024).zero_()
+            elif float(opt.ratio) < 15:
+                ff = torch.FloatTensor(n, 1024).zero_()
+            else:
+                ff = torch.FloatTensor(n, 2048).zero_()
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         for i in range(2):
@@ -140,8 +144,14 @@ def extract_feature(model,dataloaders):
             # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
             # f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
             # f = outputs[4].data.cpu()
+            if float(opt.ratio) < 5:
+                f = outputs[0].data.cpu()
+            elif float(opt.ratio) < 15:
+                f = outputs[4].data.cpu()
+            else:
+                f = torch.cat((outputs[0].data.cpu(), outputs[4].data.cpu()), 1)
             # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
-            f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[4].data.cpu()), 1)
+            # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[4].data.cpu()), 1)
             # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[3].data.cpu()), 1)
             ff = ff+f
         # norm feature

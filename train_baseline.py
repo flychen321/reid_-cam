@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -91,7 +91,7 @@ data_transforms = {
 
 
 def load_network(network):
-    save_path = 'model/model_backup/sperate/whole_net_best_stage_3.pth'
+    save_path = 'model/ft_DesNet121/whole_net_best_stage_2.pth'
     net_original = torch.load(save_path)
     # print(net_original.model.features.conv0.weight[0][0])
     pretrained_dict = net_original.state_dict()
@@ -105,9 +105,9 @@ def load_network(network):
 
 
 def load_network_easy(network):
-    # save_path = os.path.join('./model', name, 'net_best.pth')
+    save_path = os.path.join('./model', name, 'net_best.pth')
     # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22_rer94.18_m91.23.pth'
-    save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
+    # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
     print('load pretrained model: %s' % save_path)
     network.load_state_dict(torch.load(save_path))
     return network
@@ -436,6 +436,7 @@ else:
     model = ft_net(751)
 
 # print(model)
+
 if use_gpu:
     model = model.cuda()
 criterion = LSROloss()
@@ -483,7 +484,7 @@ stage_3_id = list(map(id, model.mask0.parameters())) + list(map(id, model.mask1.
              + list(map(id, model.classifier4.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
-stage_1_train = False
+stage_1_train = True
 stage_2_train = True
 stage_3_train = False
 
@@ -503,7 +504,7 @@ if stage_1_train:
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=1)
 if stage_2_train:
-    model = load_network(model)
+    model = load_network_easy(model)
     epoc = 130
     lr_ratio = 1
     step = 40
