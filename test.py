@@ -97,7 +97,7 @@ def load_network(model_structure):
     return model_structure
 
 def load_network_easy(network):
-    save_path = os.path.join('./model', name, 'net_prob_2.pth')
+    save_path = os.path.join('./model', name, 'net_best.pth')
     # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22.pth'
     # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
     # save_path = 'model/model_backup/sperate/net_best_stage_3.pth'

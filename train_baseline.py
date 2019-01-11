@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -314,7 +314,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
-                    loss = loss_ + pre_loss_
+                    # loss = loss_ + pre_loss_
+                    loss = loss_
                 elif stage == 2:
                     loss = loss_cam + loss_wo_cam
                 elif stage == 3:
@@ -373,7 +374,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if stage == 1:
-                epoch_acc = (epoch_acc1 + epoch_acc_pre) / 2.0
+                # epoch_acc = (epoch_acc1 + epoch_acc_pre) / 2.0
+                epoch_acc = epoch_acc1
             elif stage == 2:
                 r1 = 0.5
                 r2 = 0.5
