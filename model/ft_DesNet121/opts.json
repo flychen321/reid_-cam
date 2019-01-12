@@ -1,8 +1,8 @@
 {
  "name": "ft_DesNet121",
  "data_dir": "data/market/pytorch",
- "batchsize": 24,
+ "batchsize": 32,
  "erasing_p": 0.8,
  "use_dense": true,
- "modelname": "prob_0"
+ "modelname": "fly"
 }
