@@ -183,7 +183,7 @@ class ft_net_dense(nn.Module):
         model_ft2 = models.densenet121(pretrained=True)
         model_ft2.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         model_ft2.fc = FcBlock()
-        model_ft2.rf = MaskBlock()
+        model_ft2.rf = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.model2 = model_ft2
         self.classifier2 = ClassBlock(class_num=self.cam_num)
         self.fc = FcBlock()
@@ -233,9 +233,10 @@ class ft_net_dense(nn.Module):
         y = y.view(y.size(0), -1)
         # y = y.div(torch.norm(y, p=2, dim=1, keepdim=True).expand_as(y))
         feature_2 = y
-        feature_cam = feature_2.unsqueeze(-1).unsqueeze(-1)
-        feature_cam = self.model2.rf(feature_cam)
-        feature_cam = feature_cam.squeeze()
+        # feature_cam = feature_2.unsqueeze(-1).unsqueeze(-1)
+        # feature_cam = self.model2.rf(feature_cam)
+        # feature_cam = feature_cam.squeeze()
+        feature_cam = self.model2.rf(feature_2)
         y = self.model2.fc(y)
         y = self.classifier2(y)
 
@@ -267,7 +268,7 @@ class ft_net_dense(nn.Module):
         #     temp = self.classifier4(temp)
         #     result = torch.cat((result, temp.unsqueeze(0)), 0)
 
-        mid = feature_1 - feature_2  # for test  6cam
+        mid = feature_1 - feature_cam  # for test  6cam
         for i in range(self.cam_num):
             temp = mid + self.cam_f_info[i].float()
             if i == 0:

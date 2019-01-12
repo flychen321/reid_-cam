@@ -97,7 +97,7 @@ def load_network(model_structure):
     return model_structure
 
 def load_network_easy(network):
-    save_path = os.path.join('./model', name, 'net_prob_2.pth')
+    save_path = os.path.join('./model', name, 'net_best.pth')
     # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22.pth'
     # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
     # save_path = 'model/model_backup/sperate/net_best_stage_3.pth'
@@ -126,8 +126,10 @@ def extract_feature(model,dataloaders):
                 ff = torch.FloatTensor(n, 1024).zero_()
             elif float(opt.ratio) < 15:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            else:
+            elif float(opt.ratio) < 25:
                 ff = torch.FloatTensor(n, 2048).zero_()
+            else:
+                ff = torch.FloatTensor(n, 1024).zero_()
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         for i in range(2):
@@ -147,9 +149,11 @@ def extract_feature(model,dataloaders):
             if float(opt.ratio) < 5:
                 f = outputs[0].data.cpu()
             elif float(opt.ratio) < 15:
-                f = outputs[4].data.cpu()
+                f = outputs[2].data.cpu()
+            elif float(opt.ratio) < 25:
+                f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu()), 1)
             else:
-                f = torch.cat((outputs[0].data.cpu(), outputs[4].data.cpu()), 1)
+                f = outputs[0].data.cpu() + outputs[2].data.cpu()
             # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
             # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[4].data.cpu()), 1)
             # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[3].data.cpu()), 1)

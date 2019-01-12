@@ -314,7 +314,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
-                    loss = loss_ + pre_loss_
+                    loss = loss_
                 elif stage == 2:
                     loss = loss_cam + loss_wo_cam
                 elif stage == 3:
@@ -373,7 +373,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if stage == 1:
-                epoch_acc = (epoch_acc1 + epoch_acc_pre) / 2.0
+                epoch_acc = epoch_acc1
             elif stage == 2:
                 r1 = 0.5
                 r2 = 0.5
@@ -487,6 +487,7 @@ stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 stage_1_train = True
 stage_2_train = True
 stage_3_train = False
+stage_12_train = False
 
 if stage_1_train:
     # model = load_network_easy(model)
@@ -518,6 +519,22 @@ if stage_2_train:
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=2)
+if stage_12_train:
+    # model = load_network_easy(model)
+    epoc = 130
+    lr_ratio = 1
+    step = 40
+    optimizer_ft = optim.SGD([
+        {'params': stage_1_base_params, 'lr': 0.01 * lr_ratio},
+        {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
+        {'params': stage_2_base_params, 'lr': 0.01 * lr_ratio},
+        {'params': stage_2_classifier_params, 'lr': 0.05 * lr_ratio},
+        {'params': stage_3_params, 'lr': 0},
+    ], momentum=0.9, weight_decay=5e-4, nesterov=True)
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
+    model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
+                        num_epochs=epoc, stage=12)
+
 
 if stage_3_train:
     model = load_network(model)
