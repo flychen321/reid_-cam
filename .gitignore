@@ -12,3 +12,4 @@
 *.xml
 *.pkl
 *log/*
+*opts.json
