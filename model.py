@@ -162,7 +162,7 @@ class MaskBlock(nn.Module):
 
 
 class ft_net_dense(nn.Module):
-    def __init__(self, class_num, cam_num=6, istrain=True, ratio=0.65):
+    def __init__(self, class_num=751, cam_num=6, istrain=True, ratio=0.65):
         super(ft_net_dense, self).__init__()
         dst_path = 'data/market/pytorch'
         c = np.load(os.path.join(dst_path, 'cam_features_no_norm.npy'))
@@ -172,35 +172,43 @@ class ft_net_dense(nn.Module):
         self.istrain = istrain
         self.ratio = ratio
         model_ft = models.densenet121(pretrained=True)
-        # add pooling to the model
-        # in the originial version, pooling is written in the forward function
         model_ft.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        model_ft.fc = FcBlock()
-        model_ft.pre_fc = FcBlock()
         self.model = model_ft
-        self.classifier = ClassBlock()
-        self.pre_classifier = ClassBlock()
+        self.org_fc = FcBlock()
+        self.org_classifier = ClassBlock()
+        self.org_mid_fc = FcBlock()
+        self.org_mid_classifier = ClassBlock()
+
+
         model_ft2 = models.densenet121(pretrained=True)
         model_ft2.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        model_ft2.fc = FcBlock()
-        model_ft2.rf = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.model2 = model_ft2
-        self.classifier2 = ClassBlock(class_num=self.cam_num)
-        self.fc = FcBlock()
-        self.classifier3 = ClassBlock()
+        self.cam_fc = FcBlock()
+        self.cam_classifier = ClassBlock(class_num=self.cam_num)
+        self.wo_rf = FcBlock(input_dim=1024, num_bottleneck=1024)
+        self.wo_fc = FcBlock()
+        self.wo_classifier = ClassBlock()
+
+        self.cam_mid_fc = FcBlock()
+        self.cam_mid_classifier = ClassBlock(class_num=self.cam_num)
+        self.wo_mid_rf = FcBlock(input_dim=1024, num_bottleneck=1024)
+        self.wo_mid_fc = FcBlock()
+        self.wo_mid_classifier = ClassBlock()
+
+
         self.mask0 = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.mask1 = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.mask2 = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.mask3 = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.mask4 = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.mask5 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.rf = ReFineBlock(layer=1)
-        self.fc3 = FcBlock()
-        self.classifier4 = ClassBlock()
+        self.mul_cam_rf = ReFineBlock(layer=1)
+        self.mul_cam_fc = FcBlock()
+        self.mul_cam_classifier = ClassBlock()
 
     def forward(self, x):
-        temp = x
-        t = self.model.features.conv0(temp)
+        input = x
+        t = self.model.features.conv0(input)
         t = self.model.features.norm0(t)
         t = self.model.features.relu0(t)
         t = self.model.features.pool0(t)
@@ -208,15 +216,16 @@ class ft_net_dense(nn.Module):
         t = self.model.features.transition1(t)
         t = self.model.features.denseblock2(t)
         t = self.model.features.transition2(t)
-
-        t2 = t
-        t2 = F.adaptive_avg_pool2d(t2, output_size=(2, 2))
-        t2 = t2.view(t.size(0), -1)
-        t2 = self.model.pre_fc(t2)
-        t2 = self.pre_classifier(t2)
-
         t = self.model.features.denseblock3(t)
         t = self.model.features.transition3(t)
+
+        org_mid = t
+        org_mid = F.adaptive_avg_pool2d(org_mid, output_size=(2, 1))
+        org_mid = org_mid.view(t.size(0), -1)
+        feature_org_mid = org_mid
+        org_mid = self.org_mid_fc(org_mid)
+        org_mid = self.org_mid_classifier(org_mid)
+
         t = self.model.features.denseblock4(t)
         t = self.model.features.norm5(t)
         t = self.model.features.avgpool(t)
@@ -224,26 +233,51 @@ class ft_net_dense(nn.Module):
         x = t
         # x = self.model.features(x)
         x = x.view(x.size(0), -1)
-        # x = x.div(torch.norm(x, p=2, dim=1, keepdim=True).expand_as(x))
-        feature_1 = x
-        x = self.model.fc(x)
-        x = self.classifier(x)
+        feature_org = x
+        x = self.org_fc(x)
+        x = self.org_classifier(x)
 
-        y = self.model2.features(temp)
+        s = self.model2.features.conv0(input)
+        s = self.model2.features.norm0(s)
+        s = self.model2.features.relu0(s)
+        s = self.model2.features.pool0(s)
+        s = self.model2.features.denseblock1(s)
+        s = self.model2.features.transition1(s)
+        s = self.model2.features.denseblock2(s)
+        s = self.model2.features.transition2(s)
+        s = self.model2.features.denseblock3(s)
+        s = self.model2.features.transition3(s)
+
+        cam_mid = s
+        cam_mid = F.adaptive_avg_pool2d(cam_mid, output_size=(2, 1))
+        cam_mid = cam_mid.view(cam_mid.size(0), -1)
+        feature_cam_mid = cam_mid
+        cam_mid = self.cam_mid_fc(cam_mid)
+        cam_mid = self.cam_mid_classifier(cam_mid)
+
+        feature_cam_mid = self.wo_mid_rf(feature_cam_mid)
+        feature_wo_mid = feature_org_mid - feature_cam_mid
+        wo_mid = self.wo_mid_fc(feature_wo_mid)
+        wo_mid = self.wo_mid_classifier(wo_mid)
+
+
+        s = self.model2.features.denseblock4(s)
+        s = self.model2.features.norm5(s)
+        s = self.model2.features.avgpool(s)
+        y = s
+        # y = self.model2.features(input)
         y = y.view(y.size(0), -1)
-        # y = y.div(torch.norm(y, p=2, dim=1, keepdim=True).expand_as(y))
-        feature_2 = y
+        feature_cam = y
         # feature_cam = feature_2.unsqueeze(-1).unsqueeze(-1)
         # feature_cam = self.model2.rf(feature_cam)
         # feature_cam = feature_cam.squeeze()
-        feature_cam = self.model2.rf(feature_2)
-        y = self.model2.fc(y)
-        y = self.classifier2(y)
+        y = self.cam_fc(y)
+        y = self.cam_classifier(y)
 
-        z_mid = feature_1 - feature_cam
-        # z = z.div(torch.norm(z, p=2, dim=1, keepdim=True).expand_as(z))
-        z = self.fc(z_mid)
-        z = self.classifier3(z)
+        feature_cam = self.wo_rf(feature_cam)
+        feature_wo = feature_org - feature_cam
+        z = self.wo_fc(feature_wo)
+        z = self.wo_classifier(z)
 
         # for i in range(self.cam_num):   # for train 6cam
         #     temp = z_mid + ratio * self.cam_f_info[i]
@@ -268,9 +302,8 @@ class ft_net_dense(nn.Module):
         #     temp = self.classifier4(temp)
         #     result = torch.cat((result, temp.unsqueeze(0)), 0)
 
-        mid = feature_1 - feature_cam  # for test  6cam
         for i in range(self.cam_num):
-            temp = mid + self.cam_f_info[i].float()
+            temp = feature_wo + self.cam_f_info[i].float()
             if i == 0:
                 mask = self.mask0
             elif i == 1:
@@ -285,8 +318,8 @@ class ft_net_dense(nn.Module):
                 mask = self.mask5
             # temp = torch.squeeze(mask(torch.unsqueeze(torch.unsqueeze(temp, 1), 1)))
             temp = mask(temp)
-            temp = self.fc3(temp)
-            temp = self.classifier4(temp)
+            temp = self.mul_cam_fc(temp)
+            temp = self.mul_cam_classifier(temp)
             if i == 0:
                 result = temp.unsqueeze(0)
             else:
@@ -296,7 +329,7 @@ class ft_net_dense(nn.Module):
             result = result.contiguous().view(result.size(0), -1)
             # result = torch.mean(result, 1)
 
-        return x, y, z, result, t2
+        return x, y, z, result, org_mid, cam_mid, wo_mid
 
 
 '''

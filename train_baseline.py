@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -256,10 +256,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
             running_loss = 0.0
             running_corrects = 0
-            running_corrects_pre = 0
+            running_corrects_org_mid = 0
             running_corrects_cam = 0
             running_corrects_wo_cam = 0
             running_corrects_6cams = 0
+            running_corrects_cam_mid = 0
+            running_corrects_wo_mid = 0
 
             # Iterate over data.
             for data in dataloaders[phase]:
@@ -290,19 +292,23 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 # result = model(inputs)
                 outputs = result[0]
                 outputs_cam = result[1]
-                outputs_wo_cam = result[2]
+                outputs_wo = result[2]
                 outputs_6cams = result[3]
-                pre_outputs = result[4]
+                outputs_org_mid = result[4]
+                outputs_cam_mid = result[5]
+                outputs_wo_mid = result[6]
                 _, preds = torch.max(outputs.data, 1)  # outputs.data  return the index of the biggest value in each row
-                _, pre_preds = torch.max(pre_outputs.data, 1)  # outputs.data  return the index of the biggest value in each row
-                _cam, preds_cam = torch.max(outputs_cam.data,
-                                            1)  # outputs.data  return the index of the biggest value in each row
-                _wo_cam, preds_wo_cam = torch.max(outputs_wo_cam.data,
-                                                  1)  # outputs.data  return the index of the biggest value in each row
-                loss_ = criterion(outputs, labels, flags)
-                pre_loss_ = criterion(pre_outputs, labels, flags)
+                _, preds_org_mid = torch.max(outputs_org_mid.data, 1)  # outputs.data  return the index of the biggest value in each row
+                _, preds_cam = torch.max(outputs_cam.data, 1)
+                _, preds_cam_mid = torch.max(outputs_cam_mid.data, 1)
+                _, preds_wo = torch.max(outputs_wo.data, 1)
+                _, preds_wo_mid = torch.max(outputs_wo_mid.data, 1)
+                loss_org = criterion(outputs, labels, flags)
                 loss_cam = criterion(outputs_cam, labels_cam, flags)
-                loss_wo_cam = criterion(outputs_wo_cam, labels, flags)
+                loss_wo = criterion(outputs_wo, labels, flags)
+                loss_org_mid = criterion(outputs_org_mid, labels, flags)
+                loss_cam_mid = criterion(outputs_cam_mid, labels_cam, flags)
+                loss_wo_mid = criterion(outputs_wo_mid, labels, flags)
                 # loss_6cams = 0
                 loss_6cams = torch.Tensor(outputs_6cams.shape[0])
                 preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
@@ -314,13 +320,14 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
-                    loss = loss_
+                    ratio = 1.0
+                    loss = ratio * loss_org + loss_org_mid
                 elif stage == 2:
-                    loss = loss_cam + loss_wo_cam
+                    loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
                 elif stage == 3:
                     loss = torch.mean(loss_6cams)
                 elif stage == 12:
-                    loss = loss_ + loss_cam + loss_wo_cam
+                    loss = loss_org + loss_org_mid + loss_cam + loss_wo + loss_cam_mid + loss_wo_mid
                 else:
                     print('stage = %d error!' % stage)
                     exit()
@@ -342,7 +349,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
                 for temp in range(flags.size()[0]):
                     if flags.data[temp] == 1:
-                        preds_wo_cam[temp] = -1
+                        preds_wo[temp] = -1
 
                 for temp in range(flags.size()[0]):
                     if flags.data[temp] == 1:
@@ -350,50 +357,62 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                             preds_6cams[i][temp] = -1
 
                 running_corrects += torch.sum(preds == labels.data)
-                running_corrects_pre += torch.sum(pre_preds == labels.data)
+                running_corrects_org_mid += torch.sum(preds_org_mid == labels.data)
                 running_corrects_cam += torch.sum(preds_cam == labels_cam.data)
-                running_corrects_wo_cam += torch.sum(preds_wo_cam == labels.data)
+                running_corrects_wo_cam += torch.sum(preds_wo == labels.data)
+                running_corrects_cam_mid += torch.sum(preds_cam_mid == labels_cam.data)
+                running_corrects_wo_mid += torch.sum(preds_wo_mid == labels.data)
 
                 for i in range(cam_start, cam_end):
                     running_corrects_6cams += torch.sum(preds_6cams[i] == labels.data)
 
-            print('loss_       = %.5f' % loss_.data)
-            print('pre_loss_   = %.5f' % pre_loss_.data)
-            print('loss_cam    = %.5f' % loss_cam.data)
-            print('loss_wo_cam = %.5f' % loss_wo_cam.data)
+            print('loss_org     = %.5f' % loss_org.data)
+            print('loss_org_mid = %.5f' % loss_org_mid.data)
+            print('loss_cam     = %.5f' % loss_cam.data)
+            print('loss_wo_cam  = %.5f' % loss_wo.data)
+            print('loss_cam_mid = %.5f' % loss_cam_mid.data)
+            print('loss_wo_mid  = %.5f' % loss_wo_mid.data)
             print('loss_6cams[0]  = %.5f' % loss_6cams[0].data)
             print('loss_6cams  = %s' % loss_6cams.data)
             print('loss  = %s' % loss.data)
             epoch_loss = running_loss / dataset_sizes[phase]
 
-            epoch_acc1 = float(running_corrects) / dataset_sizes[phase]
-            epoch_acc_pre = float(running_corrects_pre) / dataset_sizes[phase]
+            epoch_acc_org = float(running_corrects) / dataset_sizes[phase]
+            epoch_acc_org_mid = float(running_corrects_org_mid) / dataset_sizes[phase]
             epoch_acc_cam = float(running_corrects_cam) / dataset_sizes[phase]
-            epoch_acc_wo_cam = float(running_corrects_wo_cam) / dataset_sizes[phase]
+            epoch_acc_wo = float(running_corrects_wo_cam) / dataset_sizes[phase]
+            epoch_acc_cam_mid = float(running_corrects_cam_mid) / dataset_sizes[phase]
+            epoch_acc_wo_mid = float(running_corrects_wo_mid) / dataset_sizes[phase]
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if stage == 1:
-                epoch_acc = epoch_acc1
-            elif stage == 2:
                 r1 = 0.5
                 r2 = 0.5
-                epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo_cam
+                epoch_acc = r1 * epoch_acc_org + r2 * epoch_acc_org_mid
+            elif stage == 2:
+                r1 = 0.25
+                r2 = 0.25
+                r3 = 0.25
+                r4 = 0.25
+                epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo + r3 * epoch_acc_cam_mid + r4 * epoch_acc_wo_mid
             elif stage == 3:
                 epoch_acc = epoch_acc_6cams
             elif stage == 12:
                 r1 = 0.34
                 r2 = 0.33
                 r3 = 0.33
-                epoch_acc = r1 * epoch_acc1 + r2 * epoch_acc_cam + r3 * epoch_acc_wo_cam
+                epoch_acc = r1 * epoch_acc_org + r2 * epoch_acc_cam + r3 * epoch_acc_wo
             else:
                 print('stage = %d error!' % stage)
                 exit()
 
 
-            print('acc_loss_      =  %.5f' % epoch_acc1)
-            print('epoch_acc_pre  =  %.5f' % epoch_acc_pre)
+            print('acc_org        =  %.5f' % epoch_acc_org)
+            print('acc_org_mid    =  %.5f' % epoch_acc_org_mid)
             print('acc_cam        =  %.5f' % epoch_acc_cam)
-            print('acc_wo_cam     =  %.5f' % epoch_acc_wo_cam)
+            print('acc_wo_cam     =  %.5f' % epoch_acc_wo)
+            print('acc_cam_mid    =  %.5f' % epoch_acc_cam_mid)
+            print('acc_wo_mid     =  %.5f' % epoch_acc_wo_mid)
             print('acc_6cams      =  %.5f' % epoch_acc_6cams)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
@@ -435,7 +454,7 @@ if True:  # opt.use_dense:
 else:
     model = ft_net(751)
 
-# print(model)
+print(model)
 
 if use_gpu:
     model = model.cuda()
@@ -463,25 +482,51 @@ with open('%s/opts.json' % dir_name, 'w') as fp:
 # print(len(list(map(id, model.rf.parameters()))))
 # print(len(list(map(id, model.parameters()))))
 
-stage_1_id = list(map(id, model.model.parameters())) + list(map(id, model.classifier.parameters()))
-stage_1_classifier_id = list(map(id, model.model.fc.parameters())) + list(map(id, model.classifier.parameters())) \
-                        + list(map(id, model.model.pre_fc.parameters())) + list(map(id, model.pre_classifier.parameters()))
-stage_1_base_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_classifier_id, model.parameters())
-stage_1_classifier_params = filter(lambda p: id(p) in stage_1_classifier_id, model.parameters())
+stage_1_id = list(map(id, model.model.parameters())) \
+             + list(map(id, model.org_fc.parameters())) \
+             + list(map(id, model.org_classifier.parameters())) \
+             + list(map(id, model.org_mid_fc.parameters())) \
+             + list(map(id, model.org_mid_classifier.parameters()))
+# stage_1_classifier_id = list(map(id, model.org_fc.parameters())) \
+#                         + list(map(id, model.org_classifier.parameters())) \
+#                         + list(map(id, model.org_mid_fc.parameters())) \
+#                         + list(map(id, model.org_mid_classifier.parameters()))
+stage_1_base_id = list(map(id, model.model.parameters()))
+stage_1_base_params = filter(lambda p: id(p) in stage_1_base_id, model.parameters())
+stage_1_classifier_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_base_id, model.parameters())
 
-stage_2_id = list(map(id, model.model2.parameters())) + list(map(id, model.classifier2.parameters())) \
-             + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
-stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.model2.rf.parameters())) \
-                        + list(map(id, model.classifier2.parameters())) \
-                        + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
-stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
-stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
+stage_2_id = list(map(id, model.model2.parameters())) \
+             + list(map(id, model.cam_fc.parameters())) \
+             + list(map(id, model.cam_classifier.parameters())) \
+             + list(map(id, model.wo_rf.parameters())) \
+             + list(map(id, model.wo_fc.parameters())) \
+             + list(map(id, model.wo_classifier.parameters())) \
+             + list(map(id, model.cam_mid_fc.parameters())) \
+             + list(map(id, model.cam_mid_classifier.parameters())) \
+             + list(map(id, model.wo_mid_rf.parameters())) \
+             + list(map(id, model.wo_mid_fc.parameters())) \
+             + list(map(id, model.wo_mid_classifier.parameters()))
 
-stage_3_id = list(map(id, model.mask0.parameters())) + list(map(id, model.mask1.parameters())) \
-             + list(map(id, model.mask2.parameters())) + list(map(id, model.mask3.parameters())) \
-             + list(map(id, model.mask4.parameters())) + list(map(id, model.mask5.parameters())) \
-             + list(map(id, model.rf.parameters())) + list(map(id, model.fc3.parameters())) \
-             + list(map(id, model.classifier4.parameters()))
+stage_2_base_id = list(map(id, model.model2.parameters()))
+stage_2_base_params = filter(lambda p: id(p) in stage_2_base_id, model.parameters())
+stage_2_classifier_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_base_id, model.parameters())
+
+
+# stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.model2.rf.parameters())) \
+#                         + list(map(id, model.classifier2.parameters())) \
+#                         + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
+# stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
+# stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
+
+stage_3_id = list(map(id, model.mask0.parameters())) \
+             + list(map(id, model.mask1.parameters())) \
+             + list(map(id, model.mask2.parameters())) \
+             + list(map(id, model.mask3.parameters())) \
+             + list(map(id, model.mask4.parameters())) \
+             + list(map(id, model.mask5.parameters())) \
+             + list(map(id, model.mul_cam_rf.parameters())) \
+             + list(map(id, model.mul_cam_fc.parameters())) \
+             + list(map(id, model.mul_cam_classifier.parameters()))
 stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
 stage_1_train = True
