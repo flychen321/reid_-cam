@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -92,15 +92,13 @@ data_transforms = {
 
 def load_network(network):
     save_path = 'model/ft_DesNet121/whole_net_best_stage_2.pth'
+    print('load pretrained model: %s' % save_path)
     net_original = torch.load(save_path)
-    # print(net_original.model.features.conv0.weight[0][0])
     pretrained_dict = net_original.state_dict()
     model_dict = network.state_dict()
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
     model_dict.update(pretrained_dict)
     network.load_state_dict(model_dict)
-    # print(network.model.features.conv0.weight[0][0])
-    # exit()
     return network
 
 
@@ -320,7 +318,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
 
                 if stage == 1:
-                    ratio = 1.0
+                    ratio = 2.0
                     loss = ratio * loss_org + loss_org_mid
                 elif stage == 2:
                     loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid

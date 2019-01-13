@@ -121,15 +121,29 @@ def extract_feature(model,dataloaders):
         n, c, h, w = img.size()
         count += n
       #  print(count)
+      #   x, y, z, result, org_mid, cam_mid, wo_mid
         if opt.use_dense:
-            if float(opt.ratio) < 5:
+            if int(opt.ratio) == 0:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            elif float(opt.ratio) < 15:
+            elif int(opt.ratio) == 1:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            elif float(opt.ratio) < 25:
+            elif int(opt.ratio) == 2:
+                ff = torch.FloatTensor(n, 1024).zero_()
+            elif int(opt.ratio) == 3:
+                ff = torch.FloatTensor(n, 1024).zero_()
+            elif int(opt.ratio) == 4:
                 ff = torch.FloatTensor(n, 2048).zero_()
+            elif int(opt.ratio) == 5:
+                ff = torch.FloatTensor(n, 2048).zero_()
+            elif int(opt.ratio) == 6:
+                ff = torch.FloatTensor(n, 2048).zero_()
+            elif int(opt.ratio) == 7:
+                ff = torch.FloatTensor(n, 4096).zero_()
+            elif int(opt.ratio) == 8:
+                ff = torch.FloatTensor(n, 1024).zero_()
             else:
                 ff = torch.FloatTensor(n, 1024).zero_()
+
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         for i in range(2):
@@ -138,25 +152,27 @@ def extract_feature(model,dataloaders):
             input_img = Variable(img.cuda())
             outputs = model(input_img)
             ratio = float(opt.ratio)/100.0
-            # f = torch.add(ratio * outputs[0].data.cpu(), (1-ratio) * outputs[2].data.cpu())
-            # f = outputs[0].data.cpu()
-            r1 = float(opt.ratio)/100.0
-            r1 = 0.5
-            r2 = 0.8
-            # f = torch.cat((outputs[0].data.cpu(), r1*outputs[2].data.cpu(), r2*outputs[3].data.cpu()), 1)
-            # f = r1*(r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu()) + (1-r1)*outputs[3].data.cpu()
-            # f = outputs[4].data.cpu()
-            if float(opt.ratio) < 5:
+            if int(opt.ratio) == 0:
                 f = outputs[0].data.cpu()
-            elif float(opt.ratio) < 15:
+            elif int(opt.ratio) == 1:
                 f = outputs[2].data.cpu()
-            elif float(opt.ratio) < 25:
+            elif int(opt.ratio) == 2:
+                f = outputs[4].data.cpu()
+            elif int(opt.ratio) == 3:
+                f = outputs[6].data.cpu()
+            elif int(opt.ratio) == 4:
                 f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu()), 1)
-            else:
+            elif int(opt.ratio) == 5:
+                f = torch.cat((outputs[0].data.cpu(), outputs[4].data.cpu()), 1)
+            elif int(opt.ratio) == 6:
+                f = torch.cat((outputs[4].data.cpu(), outputs[6].data.cpu()), 1)
+            elif int(opt.ratio) == 7:
+                f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[4].data.cpu(), outputs[6].data.cpu()), 1)
+            elif int(opt.ratio) == 8:
                 f = outputs[0].data.cpu() + outputs[2].data.cpu()
-            # f = (r2*outputs[0].data.cpu() + (1.0-r2)*outputs[2].data.cpu())
-            # f = torch.cat((r1*outputs[0].data.cpu(), (1.0-r1)*outputs[4].data.cpu()), 1)
-            # f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[3].data.cpu()), 1)
+            else:
+                f = outputs[0].data.cpu() + outputs[4].data.cpu()
+
             ff = ff+f
         # norm feature
         fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)   # L2 normalize
@@ -197,22 +213,19 @@ else:
 # model = load_network(model_structure)
 model = load_network_easy(model_structure)
 
-# Remove the final fc layer and classifier layer
-# model.model.fc = nn.Sequential()
-# model.classifier = nn.Sequential()
-# model.model.fc2 = nn.Sequential()
-# model.classifier2 = nn.Sequential()
 
-model.model.fc = nn.Sequential()
-model.classifier = nn.Sequential()
-model.model.pre_fc = nn.Sequential()
-model.pre_classifier = nn.Sequential()
-model.model2.fc = nn.Sequential()
-model.classifier2 = nn.Sequential()
-model.fc = nn.Sequential()
-model.classifier3 = nn.Sequential()
-model.fc3 = nn.Sequential()
-model.classifier4 = nn.Sequential()
+model.org_fc = nn.Sequential()
+model.org_classifier = nn.Sequential()
+model.org_mid_fc = nn.Sequential()
+model.org_mid_classifier = nn.Sequential()
+model.cam_fc = nn.Sequential()
+model.cam_classifier = nn.Sequential()
+model.wo_fc = nn.Sequential()
+model.wo_classifier = nn.Sequential()
+model.cam_mid_fc = nn.Sequential()
+model.cam_mid_classifier = nn.Sequential()
+model.wo_mid_fc = nn.Sequential()
+model.wo_mid_classifier = nn.Sequential()
 
 # Change to test mode
 model = model.eval()
