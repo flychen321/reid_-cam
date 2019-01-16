@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
@@ -225,15 +225,14 @@ use_gpu = torch.cuda.is_available()
 # Training the model
 # ------------------
 
-y_loss = {}  # loss history
-y_loss['train'] = []
-y_loss['val'] = []
-y_err = {}
-y_err['train'] = []
-y_err['val'] = []
-
 
 def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, refine=False):
+    y_loss = {}  # loss history
+    y_loss['train'] = []
+    y_loss['val'] = []
+    y_err = {}
+    y_err['train'] = []
+    y_err['val'] = []
     since = time.time()
     best_model_wts = model.state_dict()
     best_acc = 0.0
@@ -316,9 +315,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 for i in range(cam_start, cam_end):
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
                     loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
-
+                ratio = 1.0
                 if stage == 1:
-                    ratio = 2.0
                     loss = ratio * loss_org + loss_org_mid
                 elif stage == 2:
                     loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
@@ -452,7 +450,7 @@ if True:  # opt.use_dense:
 else:
     model = ft_net(751)
 
-print(model)
+# print(model)
 
 if use_gpu:
     model = model.cuda()
@@ -469,63 +467,47 @@ if not os.path.isdir(dir_name):
 with open('%s/opts.json' % dir_name, 'w') as fp:
     json.dump(vars(opt), fp, indent=1)
 
-# print(len(list(map(id, model.model.parameters()))))
-# print(len(list(map(id, model.model2.parameters()))))
-# print(len(list(map(id, model.classifier.parameters()))))
-# print(len(list(map(id, model.classifier2.parameters()))))
-# print(len(list(map(id, model.classifier3.parameters()))))
-# print(len(list(map(id, model.classifier4.parameters()))))
-# print(len(list(map(id, model.fc.parameters()))))
-# print(len(list(map(id, model.fc3.parameters()))))
-# print(len(list(map(id, model.rf.parameters()))))
-# print(len(list(map(id, model.parameters()))))
+def stage_params(model=model):
+    stage_1_id = list(map(id, model.model.parameters())) \
+                 + list(map(id, model.org_fc.parameters())) \
+                 + list(map(id, model.org_classifier.parameters())) \
+                 + list(map(id, model.org_mid_fc.parameters())) \
+                 + list(map(id, model.org_mid_classifier.parameters()))
+    stage_1_base_id = list(map(id, model.model.parameters()))
+    stage_1_base_params = filter(lambda p: id(p) in stage_1_base_id, model.parameters())
+    stage_1_classifier_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_base_id,
+                                       model.parameters())
 
-stage_1_id = list(map(id, model.model.parameters())) \
-             + list(map(id, model.org_fc.parameters())) \
-             + list(map(id, model.org_classifier.parameters())) \
-             + list(map(id, model.org_mid_fc.parameters())) \
-             + list(map(id, model.org_mid_classifier.parameters()))
-# stage_1_classifier_id = list(map(id, model.org_fc.parameters())) \
-#                         + list(map(id, model.org_classifier.parameters())) \
-#                         + list(map(id, model.org_mid_fc.parameters())) \
-#                         + list(map(id, model.org_mid_classifier.parameters()))
-stage_1_base_id = list(map(id, model.model.parameters()))
-stage_1_base_params = filter(lambda p: id(p) in stage_1_base_id, model.parameters())
-stage_1_classifier_params = filter(lambda p: id(p) in stage_1_id and id(p) not in stage_1_base_id, model.parameters())
+    stage_2_id = list(map(id, model.model2.parameters())) \
+                 + list(map(id, model.cam_fc.parameters())) \
+                 + list(map(id, model.cam_classifier.parameters())) \
+                 + list(map(id, model.wo_rf.parameters())) \
+                 + list(map(id, model.wo_fc.parameters())) \
+                 + list(map(id, model.wo_classifier.parameters())) \
+                 + list(map(id, model.cam_mid_fc.parameters())) \
+                 + list(map(id, model.cam_mid_classifier.parameters())) \
+                 + list(map(id, model.wo_mid_rf.parameters())) \
+                 + list(map(id, model.wo_mid_fc.parameters())) \
+                 + list(map(id, model.wo_mid_classifier.parameters()))
 
-stage_2_id = list(map(id, model.model2.parameters())) \
-             + list(map(id, model.cam_fc.parameters())) \
-             + list(map(id, model.cam_classifier.parameters())) \
-             + list(map(id, model.wo_rf.parameters())) \
-             + list(map(id, model.wo_fc.parameters())) \
-             + list(map(id, model.wo_classifier.parameters())) \
-             + list(map(id, model.cam_mid_fc.parameters())) \
-             + list(map(id, model.cam_mid_classifier.parameters())) \
-             + list(map(id, model.wo_mid_rf.parameters())) \
-             + list(map(id, model.wo_mid_fc.parameters())) \
-             + list(map(id, model.wo_mid_classifier.parameters()))
+    stage_2_base_id = list(map(id, model.model2.parameters()))
+    stage_2_base_params = filter(lambda p: id(p) in stage_2_base_id, model.parameters())
+    stage_2_classifier_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_base_id,
+                                       model.parameters())
 
-stage_2_base_id = list(map(id, model.model2.parameters()))
-stage_2_base_params = filter(lambda p: id(p) in stage_2_base_id, model.parameters())
-stage_2_classifier_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_base_id, model.parameters())
+    stage_3_id = list(map(id, model.mask0.parameters())) \
+                 + list(map(id, model.mask1.parameters())) \
+                 + list(map(id, model.mask2.parameters())) \
+                 + list(map(id, model.mask3.parameters())) \
+                 + list(map(id, model.mask4.parameters())) \
+                 + list(map(id, model.mask5.parameters())) \
+                 + list(map(id, model.mul_cam_rf.parameters())) \
+                 + list(map(id, model.mul_cam_fc.parameters())) \
+                 + list(map(id, model.mul_cam_classifier.parameters()))
+    stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
+    return stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, stage_3_params
 
-# stage_2_classifier_id = list(map(id, model.model2.fc.parameters())) + list(map(id, model.model2.rf.parameters())) \
-#                         + list(map(id, model.classifier2.parameters())) \
-#                         + list(map(id, model.fc.parameters())) + list(map(id, model.classifier3.parameters()))
-# stage_2_base_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_classifier_id, model.parameters())
-# stage_2_classifier_params = filter(lambda p: id(p) in stage_2_classifier_id, model.parameters())
-
-stage_3_id = list(map(id, model.mask0.parameters())) \
-             + list(map(id, model.mask1.parameters())) \
-             + list(map(id, model.mask2.parameters())) \
-             + list(map(id, model.mask3.parameters())) \
-             + list(map(id, model.mask4.parameters())) \
-             + list(map(id, model.mask5.parameters())) \
-             + list(map(id, model.mul_cam_rf.parameters())) \
-             + list(map(id, model.mul_cam_fc.parameters())) \
-             + list(map(id, model.mul_cam_classifier.parameters()))
-stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
 
 stage_1_train = True
 stage_2_train = True
@@ -534,7 +516,9 @@ stage_12_train = False
 
 if stage_1_train:
     # model = load_network_easy(model)
-    epoc = 130
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
+    stage_3_params = stage_params(model)
+    epoc = 2
     lr_ratio = 1
     step = 40
     optimizer_ft = optim.SGD([
@@ -547,8 +531,11 @@ if stage_1_train:
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=1)
+
 if stage_2_train:
     model = load_network_easy(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params,\
+    stage_3_params = stage_params(model)
     epoc = 130
     lr_ratio = 1
     step = 40
@@ -564,6 +551,8 @@ if stage_2_train:
                         num_epochs=epoc, stage=2)
 if stage_12_train:
     # model = load_network_easy(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
+    stage_3_params = stage_params(model)
     epoc = 130
     lr_ratio = 1
     step = 40
