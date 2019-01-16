@@ -64,8 +64,6 @@ transform_train_list = [
     # transforms.RandomResizedCrop(size=128, scale=(0.75,1.0), ratio=(0.75,1.3333), interpolation=3), #Image.BICUBIC)
     transforms.Resize(144, interpolation=3),
     transforms.RandomCrop((256, 128)),
-    #   transforms.Resize(256,interpolation=3),
-    #   transforms.RandomCrop(224,224),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -74,12 +72,9 @@ transform_train_list = [
 if opt.erasing_p > 0:
     transform_train_list = transform_train_list + [RandomErasing(opt.erasing_p)]
 
-# print(transform_train_list)
 
 transform_val_list = [
     transforms.Resize(size=(256, 128), interpolation=3),  # Image.BICUBIC
-    # transforms.Resize(256,interpolation=3),
-    # transforms.RandomCrop(224,224),
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ]
@@ -216,16 +211,11 @@ dataset_sizes['val'] = sum(len(os.listdir(os.path.join(dataset_val_dir, i))) for
 print(dataset_sizes['train'])
 print(dataset_sizes['val'])
 
-# class_names={}
-# class_names['train']=len(os.listdir(dataset_train_dir))
-# class_names['val']=len(os.listdir(dataset_val_dir))
 use_gpu = torch.cuda.is_available()
 
 ######################################################################
 # Training the model
 # ------------------
-
-
 def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, refine=False):
     y_loss = {}  # loss history
     y_loss['train'] = []
@@ -306,10 +296,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 loss_org_mid = criterion(outputs_org_mid, labels, flags)
                 loss_cam_mid = criterion(outputs_cam_mid, labels_cam, flags)
                 loss_wo_mid = criterion(outputs_wo_mid, labels, flags)
-                # loss_6cams = 0
                 loss_6cams = torch.Tensor(outputs_6cams.shape[0])
                 preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
-                # for i in range(outputs_6cams.shape[0]):
                 cam_start = 0
                 cam_end = 6
                 for i in range(cam_start, cam_end):
@@ -323,7 +311,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 elif stage == 3:
                     loss = torch.mean(loss_6cams)
                 elif stage == 12:
-                    loss = loss_org + loss_org_mid + loss_cam + loss_wo + loss_cam_mid + loss_wo_mid
+                    loss = ratio * loss_org + loss_org_mid + ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
                 else:
                     print('stage = %d error!' % stage)
                     exit()
@@ -394,10 +382,10 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             elif stage == 3:
                 epoch_acc = epoch_acc_6cams
             elif stage == 12:
-                r1 = 0.34
-                r2 = 0.33
-                r3 = 0.33
-                epoch_acc = r1 * epoch_acc_org + r2 * epoch_acc_cam + r3 * epoch_acc_wo
+                r1 = 0.5
+                r2 = 0.5
+                epoch_acc = r1 * (epoch_acc_org + epoch_acc_org_mid)/2.0 \
+                            + r2 * (epoch_acc_cam + epoch_acc_wo + epoch_acc_cam_mid + epoch_acc_wo_mid)/4.0
             else:
                 print('stage = %d error!' % stage)
                 exit()
@@ -445,7 +433,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
 # print('------------'+str(len(clas_names))+'--------------')
 if True:  # opt.use_dense:
-    # print(len(class_names['train']))
     model = ft_net_dense(751, 6, istrain=True)  # 751 class for training data in market 1501 in total
 else:
     model = ft_net(751)
@@ -518,7 +505,7 @@ if stage_1_train:
     # model = load_network_easy(model)
     stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
     stage_3_params = stage_params(model)
-    epoc = 2
+    epoc = 130
     lr_ratio = 1
     step = 40
     optimizer_ft = optim.SGD([
