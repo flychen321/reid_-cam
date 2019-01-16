@@ -532,6 +532,7 @@ if stage_1_train:
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=1)
 
+
 if stage_2_train:
     model = load_network_easy(model)
     stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params,\
@@ -549,6 +550,8 @@ if stage_2_train:
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=2)
+
+
 if stage_12_train:
     # model = load_network_easy(model)
     stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
