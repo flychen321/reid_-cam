@@ -570,6 +570,8 @@ if stage_12_train:
 
 if stage_3_train:
     model = load_network(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
+    stage_3_params = stage_params(model)
     # cal_camfeatures()
     epoc = 20
     lr_ratio = 1
