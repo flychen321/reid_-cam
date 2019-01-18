@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from pandas import DataFrame
 from glob import glob
-
+import numpy as np
 
 def get_one_result_allfiles(path):
     # data = pd.read_excel("result.xlsx", sheet_name='Sheet1')
@@ -98,6 +98,7 @@ def get_one_result_allfiles(path):
 
 def get_one_result_onefile(path):
     files = glob(path)
+    files = np.sort(files)
     print(len(files))
     epoc = []
     val_loss = []
