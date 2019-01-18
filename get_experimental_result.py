@@ -160,11 +160,15 @@ def get_one_result_onefile(path):
                     rank_5.append(r[i].split(':')[2].split('t')[0].strip())
                     rank_10.append(r[i].split(':')[3].split('m')[0].strip())
                     map_.append(r[i].split(':')[4].strip())
-                    if 'calculate' in r[i+1]:
+                    if 'calculate' in r[i+1] and 'top1' in r[i+3]:
                         re_flag = True
                     else:
                         print('error!')
-                        break
+                        rerank_1.append('-')
+                        rerank_5.append('-')
+                        rerank_10.append('-')
+                        remap.append('-')
+                        continue
                 else:
                     rerank_1.append(r[i].split(':')[1].split('t')[0].strip())
                     rerank_5.append(r[i].split(':')[2].split('t')[0].strip())
