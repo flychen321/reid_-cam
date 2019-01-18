@@ -97,8 +97,11 @@ def get_one_result_allfiles(path):
     frame.to_excel('log/result.xlsx')
 
 def get_one_result_onefile(path):
-    files = glob('log/need_process/*')
+    files = glob(path)
     print(len(files))
+    epoc = []
+    val_loss = []
+    val_acc = []
     name = []
     rank_1 = []
     rank_5 = []
@@ -128,7 +131,9 @@ def get_one_result_onefile(path):
         if len(r) < 6:
             print('len(r) = %s' % len(r))
             continue
-
+        # if 'ratio' not in r[-13]:
+        #     print('ratio not in r[-13]')
+        #     continue
         if 'top1:' not in r[-4]:
             print('top1: not in r[-4]')
             continue
@@ -137,25 +142,34 @@ def get_one_result_onefile(path):
             continue
 
         re_flag = False
+        ratio_flag = False
         for i in range(len(r)):
+            if 'Best val epoch' in r[i]:
+                epoc.append(r[i].split(':')[-1].strip())
+                ratio_flag = True
+            if 'Best val Loss' in r[i]:
+                val_loss.append(r[i].split(':')[1].strip().split('A')[0].strip())
+                val_acc.append(r[i].split(':')[2].strip())
+                ratio_flag = True
+            if 'ratio' in r[i] and ratio_flag:
+                name.append(file.split('/')[-2] + '/' + file.split('/')[-1] \
+                            + '_' + str(int(100*float(r[i].split('=')[1].strip()))))
             if 'top1:' in r[i]:
                 if not re_flag:
-                    name.append(file.split('/')[-2] + '/' + file.split('/')[-1])
-
-                    rank_1.append(r[-4].split(':')[1].split('t')[0].strip())
-                    rank_5.append(r[-4].split(':')[2].split('t')[0].strip())
-                    rank_10.append(r[-4].split(':')[3].split('m')[0].strip())
-                    map_.append(r[-4].split(':')[4].strip())
+                    rank_1.append(r[i].split(':')[1].split('t')[0].strip())
+                    rank_5.append(r[i].split(':')[2].split('t')[0].strip())
+                    rank_10.append(r[i].split(':')[3].split('m')[0].strip())
+                    map_.append(r[i].split(':')[4].strip())
                     if 'calculate' in r[i+1]:
                         re_flag = True
                     else:
                         print('error!')
                         break
                 else:
-                    rerank_1.append(r[-1].split(':')[1].split('t')[0].strip())
-                    rerank_5.append(r[-1].split(':')[2].split('t')[0].strip())
-                    rerank_10.append(r[-1].split(':')[3].split('m')[0].strip())
-                    remap.append(r[-1].split(':')[4].strip())
+                    rerank_1.append(r[i].split(':')[1].split('t')[0].strip())
+                    rerank_5.append(r[i].split(':')[2].split('t')[0].strip())
+                    rerank_10.append(r[i].split(':')[3].split('m')[0].strip())
+                    remap.append(r[i].split(':')[4].strip())
                     re_flag = False
 
         print('len(name)      = %d' % len(name))
@@ -180,6 +194,6 @@ def get_one_result_onefile(path):
 
 
 if __name__ == '__main__':
-    path = 'log/log_0'
+    path = 'log/log_[0-9]*'
     # get_one_result_allfiles(path)
     get_one_result_onefile(path)
