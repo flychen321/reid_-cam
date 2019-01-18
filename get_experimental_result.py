@@ -147,13 +147,15 @@ def get_one_result_onefile(path):
             if 'Best val epoch' in r[i]:
                 epoc.append(r[i].split(':')[-1].strip())
                 ratio_flag = True
+            if 'Best val Acc' in r[i]:
+                val_acc.append(r[i].split(':')[1].strip())
+                ratio_flag = True
             if 'Best val Loss' in r[i]:
-                val_loss.append(r[i].split(':')[1].strip().split('A')[0].strip())
-                val_acc.append(r[i].split(':')[2].strip())
+                val_loss.append(r[i].split(':')[1].strip())
                 ratio_flag = True
             if 'ratio' in r[i] and ratio_flag:
-                name.append(file.split('/')[-2] + '/' + file.split('/')[-1] \
-                            + '_' + str(int(100*float(r[i].split('=')[1].strip()))))
+                name.append(file.split('/')[-1] \
+                            + ' ' + str(int(100*float(r[i].split('=')[1].strip()))) + 'th feature')
             if 'top1:' in r[i]:
                 if not re_flag:
                     rank_1.append(r[i].split(':')[1].split('t')[0].strip())
@@ -187,9 +189,13 @@ def get_one_result_onefile(path):
         print('len(remap)     = %d' % len(remap))
 
 
-    data = {'name': name, 'rank_1': rank_1, 'rank_5': rank_5,
-            'rank_10': rank_10, 'map': map_, 'rerank_1': rerank_1, 'rerank_5': rerank_5, 'rerank_10': rerank_10,
-            'remap': remap}
+    data = {
+            # 'best_epoc': epoc, 'best_acc': val_acc,
+            # 'best_loss': val_loss,
+            'name': name, 'rank_1': rank_1, 'rank_5': rank_5, 'rank_10': rank_10, 'map': map_,
+            'rerank_1': rerank_1, 'rerank_5': rerank_5, 'rerank_10': rerank_10,
+            'remap': remap
+    }
 
     print(data)
     frame = DataFrame(data)

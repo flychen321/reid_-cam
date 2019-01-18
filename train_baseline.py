@@ -419,6 +419,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
         time_elapsed // 60, time_elapsed % 60))
     print('Best val epoch: {:d}'.format(best_epoch))
     print('Best val Acc: {:4f}'.format(best_acc))
+    print('Best val Loss: {:4f}'.format(best_loss))
 
     # load best model weights
     model.load_state_dict(best_model_wts)
