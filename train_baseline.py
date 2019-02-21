@@ -149,9 +149,11 @@ class CamDataset(ImageFolder):
         cam = self.cams[index].item()
         return img, label, cam
 
+    def get_cams_num(self):
+        return np.max(self.cams) + 1
+
     def __len__(self):
         return len(self.imgs)
-
 
 
 dataset_sizes = {}
@@ -168,6 +170,10 @@ dataloaders['train'] = DataLoader(CamDataset(dataset_train_dir, data_transforms[
                                   shuffle=True, num_workers=8)
 dataloaders['val'] = DataLoader(CamDataset(dataset_val_dir, data_transforms['val']), batch_size=opt.batchsize,
                                 shuffle=True, num_workers=8)
+
+id_num = len(dataloaders['train'].dataset.classes)
+cam_num = int(dataloaders['train'].dataset.get_cams_num())
+
 use_gpu = torch.cuda.is_available()
 
 ######################################################################
@@ -251,10 +257,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 loss_6cams = torch.Tensor(outputs_6cams.shape[0])
                 preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
                 cam_start = 0
-                cam_end = 6
+                cam_end = cam_num
                 for i in range(cam_start, cam_end):
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
-                    # loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
                     loss_6cams[i] = criterion(outputs_6cams[i], labels)
                 ratio = 1.0
                 if stage == 1:
@@ -369,7 +374,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
 # print('------------'+str(len(clas_names))+'--------------')
 if True:  # opt.use_dense:
-    model = ft_net_dense(751, 6, istrain=True)  # 751 class for training data in market 1501 in total
+    model = ft_net_dense(id_num, cam_num, istrain=True)  # 751 class for training data in all dataset in total
+    # model = ft_net_dense(751, 6, istrain=True)  # 751 class for training data in market 1501 in total
     # model = ft_net_dense(702, 8, istrain=True)  # 751 class for training data in duke in total
 else:
     model = ft_net(751)
