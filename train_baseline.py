@@ -362,7 +362,7 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                     best_loss = epoch_loss
                     best_epoch = epoch
                     best_model_wts = model.state_dict()
-                if epoch >= 0:
+                if epoch > 40 or epoch > num_epochs/2:
                     save_network(model, epoch)
             #    draw_curve(epoch)
 
