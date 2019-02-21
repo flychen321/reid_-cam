@@ -28,6 +28,7 @@ from random_erasing import RandomErasing
 import json
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torchvision.datasets import ImageFolder
 from cal_cam_feature import cal_camfeatures
 ######################################################################
 # Options
@@ -115,92 +116,43 @@ def save_network(network, epoch_label):
     torch.save(network.state_dict(), save_path)
 
 
-# read dcgan data
-class dcganDataset(Dataset):
-    def __init__(self, root, transform=None, targte_transform=None):
-        super(dcganDataset, self).__init__()
-        self.image_dir = os.path.join(opt.data_dir, root)
-        self.samples = []  # train_data   xxx_label_flag_yyy.jpg
-        self.img_label = []
-        self.img_label_cam = []
-        self.img_flag = []
-        self.transform = transform
-        self.targte_transform = targte_transform
-        #   self.class_num=len(os.listdir(self.image_dir))   # the number of the class
-        self.train_val = root  # judge whether it is used for training for testing
-        for folder in os.listdir(self.image_dir):
-            fdir = self.image_dir + '/' + folder  # folder gen_0000 means the images are generated images, so their flags are 1
-            for files in os.listdir(fdir):
-                temp = folder + '_' + files
-                self.img_label.append(int(folder))
-                # print(temp)
-                # print(files)
-                # print(files[6])
-                self.img_label_cam.append(int(files[6]) - 1)
-                self.img_flag.append(0)
-                self.samples.append(temp)
+
+class CamDataset(ImageFolder):
+    """
+    Train: For each sample creates randomly 4 images
+    Test: Creates fixed pairs for testing
+    """
+
+    def __init__(self, root, transform):
+        super(CamDataset, self).__init__(root, transform)
+        self.labels = np.array(self.imgs)[:, 1].astype(int)
+        self.data = np.array(self.imgs)[:, 0]
+        self.labels_set = set(self.labels)
+        self.label_to_indices = {label: np.where(self.labels == label)[0]
+                                 for label in self.labels_set}
+        cams = []
+        for s in self.imgs:
+            cams.append(self._get_cam_id(s[0]))
+        self.cams = np.asarray(cams)
+
+    def _get_cam_id(self, path):
+        filename = os.path.basename(path)
+        camera_id = filename.split('c')[1][0]
+        return int(camera_id) - 1
+
+    def __getitem__(self, index):
+        img = self.data[index].item()
+        img = default_loader(img)
+        if self.transform is not None:
+            img = self.transform(img)
+        label = self.labels[index].item()
+        cam = self.cams[index].item()
+        return img, label, cam
 
     def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-
-        temp = self.samples[idx]  # folder_files
-        # print(temp)
-        if self.img_flag[idx] == 1:
-            foldername = 'gen_0000'
-            filename = temp[9:]
-        else:
-            foldername = temp[:4]
-            filename = temp[5:]
-        img = default_loader(self.image_dir + '/' + foldername + '/' + filename)
-        if self.train_val == 'train_new':
-            result = {'img': data_transforms['train'](img), 'label': self.img_label[idx],
-                      'label_cam': self.img_label_cam[idx],
-                      'flag': self.img_flag[idx]}  # flag=0 for ture data and 0 for generated data
-        else:
-            result = {'img': data_transforms['val'](img), 'label': self.img_label[idx],
-                      'label_cam': self.img_label_cam[idx], 'flag': self.img_flag[idx]}
-        return result
+        return len(self.imgs)
 
 
-class LSROloss(nn.Module):
-    def __init__(self):  # change target to range(0,750)
-        super(LSROloss, self).__init__()
-        # input means the prediction score(torch Variable) 32*752,target means the corresponding label,
-
-    def forward(self, input, target,
-                flg):  # while flg means the flag(=0 for true data and 1 for generated data)  batchsize*1
-        # print(type(input))
-        if input.dim() > 2:  # N defines the number of images, C defines channels,  K class in total
-            input = input.view(input.size(0), input.size(1), -1)  # N,C,H,W => N,C,H*W
-            input = input.transpose(1, 2)  # N,C,H*W => N,H*W,C
-            input = input.contiguous().view(-1, input.size(2))  # N,H*W,C => N*H*W,C
-
-        # normalize input
-        maxRow, _ = torch.max(input.data, 1)  # outputs.data  return the index of the biggest value in each row
-        maxRow = maxRow.unsqueeze(1)
-        input.data = input.data - maxRow
-
-        target = target.view(-1, 1)  # batchsize*1
-        flg = flg.view(-1, 1)
-        # len=flg.size()[0]
-        flos = F.log_softmax(input, 1)  # N*K?      batchsize*751
-        flos = torch.sum(flos, 1) / flos.size(1)  # N*1  get average      gan loss
-        logpt = F.log_softmax(input, 1)  # size: batchsize*751
-        logpt = logpt.gather(1, target)  # here is a problem
-        logpt = logpt.view(-1)
-        flg = flg.view(-1)
-        flg = flg.type(torch.cuda.FloatTensor)
-        loss = -1 * logpt * (1 - flg) - flos * flg
-        return loss.mean()
-
-
-dataloaders = {}
-dataloaders['train'] = DataLoader(dcganDataset('train_new', data_transforms['train']), batch_size=opt.batchsize,
-                                  shuffle=True, num_workers=8)
-dataloaders['val'] = DataLoader(dcganDataset('val_new', data_transforms['val']), batch_size=opt.batchsize,
-                                shuffle=True, num_workers=8)
 
 dataset_sizes = {}
 dataset_train_dir = os.path.join(data_dir, 'train_new')
@@ -211,6 +163,11 @@ dataset_sizes['val'] = sum(len(os.listdir(os.path.join(dataset_val_dir, i))) for
 print(dataset_sizes['train'])
 print(dataset_sizes['val'])
 
+dataloaders = {}
+dataloaders['train'] = DataLoader(CamDataset(dataset_train_dir, data_transforms['train']), batch_size=opt.batchsize,
+                                  shuffle=True, num_workers=8)
+dataloaders['val'] = DataLoader(CamDataset(dataset_val_dir, data_transforms['val']), batch_size=opt.batchsize,
+                                shuffle=True, num_workers=8)
 use_gpu = torch.cuda.is_available()
 
 ######################################################################
@@ -253,19 +210,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             # Iterate over data.
             for data in dataloaders[phase]:
                 # get the inputs
-                inputs = data['img']
-                labels = data['label']
-                labels_cam = data['label_cam']
-                flags = data['flag']
+                inputs, labels, labels_cam = data
 
                 if use_gpu:
                     inputs = Variable(inputs.cuda())
                     labels = Variable(labels.cuda())
                     labels_cam = Variable(labels_cam.cuda())
-                    flags = Variable(flags.cuda())
-                else:
-                    inputs, labels, labels_cam, flags = Variable(inputs), Variable(labels), Variable(
-                        labels_cam), Variable(flags)
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
@@ -290,19 +240,22 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 _, preds_cam_mid = torch.max(outputs_cam_mid.data, 1)
                 _, preds_wo = torch.max(outputs_wo.data, 1)
                 _, preds_wo_mid = torch.max(outputs_wo_mid.data, 1)
-                loss_org = criterion(outputs, labels, flags)
-                loss_cam = criterion(outputs_cam, labels_cam, flags)
-                loss_wo = criterion(outputs_wo, labels, flags)
-                loss_org_mid = criterion(outputs_org_mid, labels, flags)
-                loss_cam_mid = criterion(outputs_cam_mid, labels_cam, flags)
-                loss_wo_mid = criterion(outputs_wo_mid, labels, flags)
+
+                loss_org = criterion(outputs, labels)
+                loss_cam = criterion(outputs_cam, labels_cam)
+                loss_wo = criterion(outputs_wo, labels)
+                loss_org_mid = criterion(outputs_org_mid, labels)
+                loss_cam_mid = criterion(outputs_cam_mid, labels_cam)
+                loss_wo_mid = criterion(outputs_wo_mid, labels)
+
                 loss_6cams = torch.Tensor(outputs_6cams.shape[0])
                 preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
                 cam_start = 0
                 cam_end = 6
                 for i in range(cam_start, cam_end):
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
-                    loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
+                    # loss_6cams[i] = criterion(outputs_6cams[i], labels, flags)
+                    loss_6cams[i] = criterion(outputs_6cams[i], labels)
                 ratio = 1.0
                 if stage == 1:
                     loss = ratio * loss_org + loss_org_mid
@@ -322,23 +275,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 
                 # statistics
                 running_loss += loss.data[0]
-
-                for temp in range(flags.size()[0]):
-                    if flags.data[temp] == 1:
-                        preds[temp] = -1
-
-                for temp in range(flags.size()[0]):
-                    if flags.data[temp] == 1:
-                        preds_cam[temp] = -1
-
-                for temp in range(flags.size()[0]):
-                    if flags.data[temp] == 1:
-                        preds_wo[temp] = -1
-
-                for temp in range(flags.size()[0]):
-                    if flags.data[temp] == 1:
-                        for i in range(cam_start, cam_end):
-                            preds_6cams[i][temp] = -1
 
                 running_corrects += torch.sum(preds == labels.data)
                 running_corrects_org_mid += torch.sum(preds_org_mid == labels.data)
@@ -390,7 +326,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 print('stage = %d error!' % stage)
                 exit()
 
-
             print('acc_org        =  %.5f' % epoch_acc_org)
             print('acc_org_mid    =  %.5f' % epoch_acc_org_mid)
             print('acc_cam        =  %.5f' % epoch_acc_cam)
@@ -435,6 +370,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
 # print('------------'+str(len(clas_names))+'--------------')
 if True:  # opt.use_dense:
     model = ft_net_dense(751, 6, istrain=True)  # 751 class for training data in market 1501 in total
+    # model = ft_net_dense(702, 8, istrain=True)  # 751 class for training data in duke in total
 else:
     model = ft_net(751)
 
@@ -442,8 +378,8 @@ else:
 
 if use_gpu:
     model = model.cuda()
-criterion = LSROloss()
 
+criterion = nn.CrossEntropyLoss()
 
 # Decay LR by a factor of 0.1 every 40 epochs
 
