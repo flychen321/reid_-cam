@@ -181,7 +181,7 @@ use_gpu = torch.cuda.is_available()
 ######################################################################
 # Training the model
 # ------------------
-def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, refine=False):
+def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epochs=35, stage=1):
     y_loss = {}  # loss history
     y_loss['train'] = []
     y_loss['val'] = []
@@ -265,17 +265,30 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].detach(), 1)
                     loss_6cams[i] = criterion(outputs_6cams[i], labels)
                 ratio = 1.0
-                if stage == 1:
-                    loss = ratio * loss_org + loss_org_mid
-                elif stage == 2:
-                    loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
-                elif stage == 3:
-                    loss = torch.mean(loss_6cams)
-                elif stage == 12:
-                    loss = ratio * loss_org + loss_org_mid + ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
+                if use_mid:
+                    if stage == 1:
+                        loss = ratio * loss_org + loss_org_mid
+                    elif stage == 2:
+                        loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
+                    elif stage == 3:
+                        loss = torch.mean(loss_6cams)
+                    elif stage == 12:
+                        loss = ratio * loss_org + loss_org_mid + ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
+                    else:
+                        print('stage = %d error!' % stage)
+                        exit()
                 else:
-                    print('stage = %d error!' % stage)
-                    exit()
+                    if stage == 1:
+                        loss = loss_org
+                    elif stage == 2:
+                        loss = loss_cam + loss_wo
+                    elif stage == 3:
+                        loss = torch.mean(loss_6cams)
+                    elif stage == 12:
+                        loss = loss_org + loss_cam + loss_wo
+                    else:
+                        print('stage = %d error!' % stage)
+                        exit()
 
                 if phase == 'train':
                     loss.backward()
@@ -313,26 +326,41 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             epoch_acc_wo_mid = float(running_corrects_wo_mid) / dataset_sizes[phase]
             epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
-            if stage == 1:
-                r1 = 0.5
-                r2 = 0.5
-                epoch_acc = r1 * epoch_acc_org + r2 * epoch_acc_org_mid
-            elif stage == 2:
-                r1 = 0.25
-                r2 = 0.25
-                r3 = 0.25
-                r4 = 0.25
-                epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo + r3 * epoch_acc_cam_mid + r4 * epoch_acc_wo_mid
-            elif stage == 3:
-                epoch_acc = epoch_acc_6cams
-            elif stage == 12:
-                r1 = 0.5
-                r2 = 0.5
-                epoch_acc = r1 * (epoch_acc_org + epoch_acc_org_mid)/2.0 \
-                            + r2 * (epoch_acc_cam + epoch_acc_wo + epoch_acc_cam_mid + epoch_acc_wo_mid)/4.0
+            if use_mid:
+                if stage == 1:
+                    r1 = 0.5
+                    r2 = 0.5
+                    epoch_acc = r1 * epoch_acc_org + r2 * epoch_acc_org_mid
+                elif stage == 2:
+                    r1 = 0.25
+                    r2 = 0.25
+                    r3 = 0.25
+                    r4 = 0.25
+                    epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo + r3 * epoch_acc_cam_mid + r4 * epoch_acc_wo_mid
+                elif stage == 3:
+                    epoch_acc = epoch_acc_6cams
+                elif stage == 12:
+                    r1 = 0.5
+                    r2 = 0.5
+                    epoch_acc = r1 * (epoch_acc_org + epoch_acc_org_mid)/2.0 \
+                                + r2 * (epoch_acc_cam + epoch_acc_wo + epoch_acc_cam_mid + epoch_acc_wo_mid)/4.0
+                else:
+                    print('stage = %d error!' % stage)
+                    exit()
             else:
-                print('stage = %d error!' % stage)
-                exit()
+                if stage == 1:
+                    epoch_acc = epoch_acc_org
+                elif stage == 2:
+                    epoch_acc = (epoch_acc_cam + epoch_acc_wo)/2.0
+                elif stage == 3:
+                    epoch_acc = epoch_acc_6cams
+                elif stage == 12:
+                    r1 = 0.5
+                    r2 = 0.5
+                    epoch_acc = r1 * epoch_acc_org + r2 * (epoch_acc_cam + epoch_acc_wo)/2.0
+                else:
+                    print('stage = %d error!' % stage)
+                    exit()
 
             print('acc_org        =  %.5f' % epoch_acc_org)
             print('acc_org_mid    =  %.5f' % epoch_acc_org_mid)
@@ -347,7 +375,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
             y_loss[phase].append(epoch_loss)
             y_err[phase].append(1.0 - epoch_acc)
             # deep copy the model
-            if phase == 'val':
+            # if phase == 'val':
+            if True:
                 if epoch_acc > best_acc or (np.fabs(epoch_acc - best_acc) < 1e-5 and epoch_loss < best_loss):
                     best_acc = epoch_acc
                     best_loss = epoch_loss
@@ -446,6 +475,7 @@ stage_1_train = True
 stage_2_train = True
 stage_3_train = False
 stage_12_train = False
+use_mid = False
 
 if stage_1_train:
     # model = load_network_easy(model)
