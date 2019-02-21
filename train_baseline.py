@@ -157,8 +157,10 @@ class CamDataset(ImageFolder):
 
 
 dataset_sizes = {}
-dataset_train_dir = os.path.join(data_dir, 'train_new')
-dataset_val_dir = os.path.join(data_dir, 'val_new')
+# dataset_train_dir = os.path.join(data_dir, 'train_new')
+# dataset_val_dir = os.path.join(data_dir, 'val_new')
+dataset_train_dir = os.path.join(data_dir, 'train_all')
+dataset_val_dir = os.path.join(data_dir, 'val')
 dataset_sizes['train'] = sum(len(os.listdir(os.path.join(dataset_train_dir, i))) for i in os.listdir(dataset_train_dir))
 dataset_sizes['val'] = sum(len(os.listdir(os.path.join(dataset_val_dir, i))) for i in os.listdir(dataset_val_dir))
 
@@ -197,7 +199,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
+        # for phase in ['train', 'val']:
+        for phase in ['train']:
             if phase == 'train':
                 scheduler.step()
                 model.train(True)  # Set model to training mode
