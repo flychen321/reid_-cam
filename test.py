@@ -24,7 +24,7 @@ from model import ft_net, ft_net_dense
 parser = argparse.ArgumentParser(description='Training')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
-parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
+parser.add_argument('--test_dir',default='./data/duke/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
@@ -86,7 +86,7 @@ def load_network(model_structure):
     return model_structure
 
 def load_network_easy(network):
-    save_path = os.path.join('./model', name, 'net_best.pth')
+    save_path = os.path.join('./model', name, 'net_best_stage_1_womid.pth')
     # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22.pth'
     # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
     # save_path = 'model/model_backup/sperate/net_best_stage_3.pth'
@@ -109,8 +109,9 @@ def extract_feature(model,dataloaders):
         img, label = data
         n, c, h, w = img.size()
         count += n
-      #  print(count)
-      #   x, y, z, result, org_mid, cam_mid, wo_mid
+        # print(count)
+        # x, y, z, org_mid, cam_mid, wo_mid
+        opt.ratio = 0
         if opt.use_dense:
             if int(opt.ratio) == 0:
                 ff = torch.FloatTensor(n, 1024).zero_()
@@ -118,21 +119,6 @@ def extract_feature(model,dataloaders):
                 ff = torch.FloatTensor(n, 1024).zero_()
             elif int(opt.ratio) == 2:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            elif int(opt.ratio) == 3:
-                ff = torch.FloatTensor(n, 1024).zero_()
-            elif int(opt.ratio) == 4:
-                ff = torch.FloatTensor(n, 2048).zero_()
-            elif int(opt.ratio) == 5:
-                ff = torch.FloatTensor(n, 2048).zero_()
-            elif int(opt.ratio) == 6:
-                ff = torch.FloatTensor(n, 2048).zero_()
-            elif int(opt.ratio) == 7:
-                ff = torch.FloatTensor(n, 4096).zero_()
-            elif int(opt.ratio) == 8:
-                ff = torch.FloatTensor(n, 1024).zero_()
-            else:
-                ff = torch.FloatTensor(n, 1024).zero_()
-
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         for i in range(2):
@@ -140,27 +126,12 @@ def extract_feature(model,dataloaders):
                 img = fliplr(img)
             input_img = Variable(img.cuda())
             outputs = model(input_img)
-            ratio = float(opt.ratio)/100.0
             if int(opt.ratio) == 0:
                 f = outputs[0].data.cpu()
             elif int(opt.ratio) == 1:
                 f = outputs[2].data.cpu()
             elif int(opt.ratio) == 2:
-                f = outputs[4].data.cpu()
-            elif int(opt.ratio) == 3:
-                f = outputs[6].data.cpu()
-            elif int(opt.ratio) == 4:
-                f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu()), 1)
-            elif int(opt.ratio) == 5:
-                f = torch.cat((outputs[0].data.cpu(), outputs[4].data.cpu()), 1)
-            elif int(opt.ratio) == 6:
-                f = torch.cat((outputs[4].data.cpu(), outputs[6].data.cpu()), 1)
-            elif int(opt.ratio) == 7:
-                f = torch.cat((outputs[0].data.cpu(), outputs[2].data.cpu(), outputs[4].data.cpu(), outputs[6].data.cpu()), 1)
-            elif int(opt.ratio) == 8:
                 f = outputs[0].data.cpu() + outputs[2].data.cpu()
-            else:
-                f = outputs[0].data.cpu() + outputs[4].data.cpu()
 
             ff = ff+f
         # norm feature
