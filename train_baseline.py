@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.autograd import Variable
 import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
@@ -30,6 +29,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision.datasets import ImageFolder
 from cal_cam_feature import cal_camfeatures
+
 ######################################################################
 # Options
 parser = argparse.ArgumentParser(description='Training')
@@ -102,7 +102,7 @@ def load_network_easy(network):
     save_path = os.path.join('./model', name, 'net_best.pth')
     # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22_rer94.18_m91.23.pth'
     # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
-    print('load pretrained model: %s' % save_path)
+    print('load easy pretrained model: %s' % save_path)
     network.load_state_dict(torch.load(save_path))
     return network
 
@@ -219,9 +219,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 inputs, labels, labels_cam = data
 
                 if use_gpu:
-                    inputs = Variable(inputs.cuda())
-                    labels = Variable(labels.cuda())
-                    labels_cam = Variable(labels_cam.cuda())
+                    inputs = inputs.cuda()
+                    labels = labels.cuda()
+                    labels_cam = labels_cam.cuda()
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
@@ -240,12 +240,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 outputs_org_mid = result[4]
                 outputs_cam_mid = result[5]
                 outputs_wo_mid = result[6]
-                _, preds = torch.max(outputs.data, 1)  # outputs.data  return the index of the biggest value in each row
-                _, preds_org_mid = torch.max(outputs_org_mid.data, 1)  # outputs.data  return the index of the biggest value in each row
-                _, preds_cam = torch.max(outputs_cam.data, 1)
-                _, preds_cam_mid = torch.max(outputs_cam_mid.data, 1)
-                _, preds_wo = torch.max(outputs_wo.data, 1)
-                _, preds_wo_mid = torch.max(outputs_wo_mid.data, 1)
+                _, preds = torch.max(outputs.detach(), 1)  # outputs.detach()  return the index of the biggest value in each row
+                _, preds_org_mid = torch.max(outputs_org_mid.detach(), 1)  # outputs.detach()  return the index of the biggest value in each row
+                _, preds_cam = torch.max(outputs_cam.detach(), 1)
+                _, preds_cam_mid = torch.max(outputs_cam_mid.detach(), 1)
+                _, preds_wo = torch.max(outputs_wo.detach(), 1)
+                _, preds_wo_mid = torch.max(outputs_wo_mid.detach(), 1)
 
                 loss_org = criterion(outputs, labels)
                 loss_cam = criterion(outputs_cam, labels_cam)
@@ -259,7 +259,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                 cam_start = 0
                 cam_end = cam_num
                 for i in range(cam_start, cam_end):
-                    _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].data, 1)
+                    _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].detach(), 1)
                     loss_6cams[i] = criterion(outputs_6cams[i], labels)
                 ratio = 1.0
                 if stage == 1:
@@ -279,27 +279,27 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=35, stage=1, 
                     optimizer.step()
 
                 # statistics
-                running_loss += loss.data[0]
+                running_loss += loss.item()
 
-                running_corrects += torch.sum(preds == labels.data)
-                running_corrects_org_mid += torch.sum(preds_org_mid == labels.data)
-                running_corrects_cam += torch.sum(preds_cam == labels_cam.data)
-                running_corrects_wo_cam += torch.sum(preds_wo == labels.data)
-                running_corrects_cam_mid += torch.sum(preds_cam_mid == labels_cam.data)
-                running_corrects_wo_mid += torch.sum(preds_wo_mid == labels.data)
+                running_corrects += torch.sum(preds == labels.detach())
+                running_corrects_org_mid += torch.sum(preds_org_mid == labels.detach())
+                running_corrects_cam += torch.sum(preds_cam == labels_cam.detach())
+                running_corrects_wo_cam += torch.sum(preds_wo == labels.detach())
+                running_corrects_cam_mid += torch.sum(preds_cam_mid == labels_cam.detach())
+                running_corrects_wo_mid += torch.sum(preds_wo_mid == labels.detach())
 
                 for i in range(cam_start, cam_end):
-                    running_corrects_6cams += torch.sum(preds_6cams[i] == labels.data)
+                    running_corrects_6cams += torch.sum(preds_6cams[i] == labels.detach())
 
-            print('loss_org     = %.5f' % loss_org.data)
-            print('loss_org_mid = %.5f' % loss_org_mid.data)
-            print('loss_cam     = %.5f' % loss_cam.data)
-            print('loss_wo_cam  = %.5f' % loss_wo.data)
-            print('loss_cam_mid = %.5f' % loss_cam_mid.data)
-            print('loss_wo_mid  = %.5f' % loss_wo_mid.data)
-            print('loss_6cams[0]  = %.5f' % loss_6cams[0].data)
-            print('loss_6cams  = %s' % loss_6cams.data)
-            print('loss  = %s' % loss.data)
+            print('loss_org     = %.5f' % loss_org.detach())
+            print('loss_org_mid = %.5f' % loss_org_mid.detach())
+            print('loss_cam     = %.5f' % loss_cam.detach())
+            print('loss_wo_cam  = %.5f' % loss_wo.detach())
+            print('loss_cam_mid = %.5f' % loss_cam_mid.detach())
+            print('loss_wo_mid  = %.5f' % loss_wo_mid.detach())
+            print('loss_6cams[0]  = %.5f' % loss_6cams[0].detach())
+            print('loss_6cams  = %s' % loss_6cams.detach())
+            print('loss  = %s' % loss.detach())
             epoch_loss = running_loss / dataset_sizes[phase]
 
             epoch_acc_org = float(running_corrects) / dataset_sizes[phase]
