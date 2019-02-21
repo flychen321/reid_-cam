@@ -164,9 +164,6 @@ class MaskBlock(nn.Module):
 class ft_net_dense(nn.Module):
     def __init__(self, class_num=751, cam_num=6, istrain=True, ratio=0.65):
         super(ft_net_dense, self).__init__()
-        dst_path = 'data/market/pytorch'
-        c = np.load(os.path.join(dst_path, 'cam_features_no_norm.npy'))
-        self.cam_f_info = torch.from_numpy(c).cuda()
         self.class_num = class_num
         self.cam_num = cam_num
         self.istrain = istrain
@@ -195,16 +192,6 @@ class ft_net_dense(nn.Module):
         self.wo_mid_fc = FcBlock()
         self.wo_mid_classifier = ClassBlock()
 
-
-        self.mask0 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mask1 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mask2 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mask3 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mask4 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mask5 = FcBlock(input_dim=1024, num_bottleneck=1024)
-        self.mul_cam_rf = ReFineBlock(layer=1)
-        self.mul_cam_fc = FcBlock()
-        self.mul_cam_classifier = ClassBlock()
 
     def forward(self, x):
         input = x
@@ -260,7 +247,6 @@ class ft_net_dense(nn.Module):
         wo_mid = self.wo_mid_fc(feature_wo_mid)
         wo_mid = self.wo_mid_classifier(wo_mid)
 
-
         s = self.model2.features.denseblock4(s)
         s = self.model2.features.norm5(s)
         s = self.model2.features.avgpool(s)
@@ -268,9 +254,6 @@ class ft_net_dense(nn.Module):
         # y = self.model2.features(input)
         y = y.view(y.size(0), -1)
         feature_cam = y
-        # feature_cam = feature_2.unsqueeze(-1).unsqueeze(-1)
-        # feature_cam = self.model2.rf(feature_cam)
-        # feature_cam = feature_cam.squeeze()
         y = self.cam_fc(y)
         y = self.cam_classifier(y)
 
@@ -279,57 +262,8 @@ class ft_net_dense(nn.Module):
         z = self.wo_fc(feature_wo)
         z = self.wo_classifier(z)
 
-        # for i in range(self.cam_num):   # for train 6cam
-        #     temp = z_mid + ratio * self.cam_f_info[i]
-        #     temp = self.rf(temp)
-        #     temp = self.fc3(temp)
-        #     temp = self.classifier4(temp)
-        #     if i == 0:
-        #         result = temp.unsqueeze(0)
-        #     else:
-        #         result = torch.cat((result, temp.unsqueeze(0)), 0)
 
-        # mid = feature_1 - 0.35*feature_2
-        # temp = feature_1 - 0.35*feature_2  # for train  7cam
-        # temp = self.rf(temp)
-        # temp = self.fc3(temp)
-        # temp = self.classifier4(temp)
-        # result = temp.unsqueeze(0)
-        # for i in range(self.cam_num):
-        #     temp = mid + 0.35*self.cam_f_info[i]
-        #     temp = self.rf(temp)
-        #     temp = self.fc3(temp)
-        #     temp = self.classifier4(temp)
-        #     result = torch.cat((result, temp.unsqueeze(0)), 0)
-
-        for i in range(self.cam_num):
-            temp = feature_wo + self.cam_f_info[i].float()
-            if i == 0:
-                mask = self.mask0
-            elif i == 1:
-                mask = self.mask1
-            elif i == 2:
-                mask = self.mask2
-            elif i == 3:
-                mask = self.mask3
-            elif i == 4:
-                mask = self.mask4
-            elif i == 5:
-                mask = self.mask5
-            # temp = torch.squeeze(mask(torch.unsqueeze(torch.unsqueeze(temp, 1), 1)))
-            temp = mask(temp)
-            temp = self.mul_cam_fc(temp)
-            temp = self.mul_cam_classifier(temp)
-            if i == 0:
-                result = temp.unsqueeze(0)
-            else:
-                result = torch.cat((result, temp.unsqueeze(0)), 0)
-        if not self.istrain:
-            result = result.transpose(0, 1)
-            result = result.contiguous().view(result.size(0), -1)
-            # result = torch.mean(result, 1)
-
-        return x, y, z, result, org_mid, cam_mid, wo_mid
+        return x, y, z, org_mid, cam_mid, wo_mid
 
 
 '''

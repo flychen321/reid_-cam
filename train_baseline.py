@@ -181,7 +181,7 @@ use_gpu = torch.cuda.is_available()
 ######################################################################
 # Training the model
 # ------------------
-def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epochs=35, stage=1):
+def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epochs=130, stage=1):
     y_loss = {}  # loss history
     y_loss['train'] = []
     y_loss['val'] = []
@@ -212,7 +212,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
             running_corrects_org_mid = 0
             running_corrects_cam = 0
             running_corrects_wo_cam = 0
-            running_corrects_6cams = 0
             running_corrects_cam_mid = 0
             running_corrects_wo_mid = 0
 
@@ -239,10 +238,9 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                 outputs = result[0]
                 outputs_cam = result[1]
                 outputs_wo = result[2]
-                outputs_6cams = result[3]
-                outputs_org_mid = result[4]
-                outputs_cam_mid = result[5]
-                outputs_wo_mid = result[6]
+                outputs_org_mid = result[3]
+                outputs_cam_mid = result[4]
+                outputs_wo_mid = result[5]
                 _, preds = torch.max(outputs.detach(), 1)  # outputs.detach()  return the index of the biggest value in each row
                 _, preds_org_mid = torch.max(outputs_org_mid.detach(), 1)  # outputs.detach()  return the index of the biggest value in each row
                 _, preds_cam = torch.max(outputs_cam.detach(), 1)
@@ -257,21 +255,14 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                 loss_cam_mid = criterion(outputs_cam_mid, labels_cam)
                 loss_wo_mid = criterion(outputs_wo_mid, labels)
 
-                loss_6cams = torch.Tensor(outputs_6cams.shape[0])
-                preds_6cams = torch.LongTensor(outputs_6cams.shape[0], labels.shape[0]).zero_().cuda()
-                cam_start = 0
-                cam_end = cam_num
-                for i in range(cam_start, cam_end):
-                    _6cams, preds_6cams[i] = torch.max(outputs_6cams[i].detach(), 1)
-                    loss_6cams[i] = criterion(outputs_6cams[i], labels)
                 ratio = 1.0
                 if use_mid:
                     if stage == 1:
                         loss = ratio * loss_org + loss_org_mid
                     elif stage == 2:
                         loss = ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
-                    elif stage == 3:
-                        loss = torch.mean(loss_6cams)
+                    # elif stage == 3:
+                    #     loss = torch.mean(loss_6cams)
                     elif stage == 12:
                         loss = ratio * loss_org + loss_org_mid + ratio * (loss_cam + loss_wo) + loss_cam_mid + loss_wo_mid
                     else:
@@ -282,8 +273,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                         loss = loss_org
                     elif stage == 2:
                         loss = loss_cam + loss_wo
-                    elif stage == 3:
-                        loss = torch.mean(loss_6cams)
                     elif stage == 12:
                         loss = loss_org + loss_cam + loss_wo
                     else:
@@ -304,8 +293,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                 running_corrects_cam_mid += torch.sum(preds_cam_mid == labels_cam.detach())
                 running_corrects_wo_mid += torch.sum(preds_wo_mid == labels.detach())
 
-                for i in range(cam_start, cam_end):
-                    running_corrects_6cams += torch.sum(preds_6cams[i] == labels.detach())
 
             print('loss_org     = %.5f' % loss_org.detach())
             print('loss_org_mid = %.5f' % loss_org_mid.detach())
@@ -313,8 +300,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
             print('loss_wo_cam  = %.5f' % loss_wo.detach())
             print('loss_cam_mid = %.5f' % loss_cam_mid.detach())
             print('loss_wo_mid  = %.5f' % loss_wo_mid.detach())
-            print('loss_6cams[0]  = %.5f' % loss_6cams[0].detach())
-            print('loss_6cams  = %s' % loss_6cams.detach())
             print('loss  = %s' % loss.detach())
             epoch_loss = running_loss / dataset_sizes[phase]
 
@@ -324,7 +309,7 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
             epoch_acc_wo = float(running_corrects_wo_cam) / dataset_sizes[phase]
             epoch_acc_cam_mid = float(running_corrects_cam_mid) / dataset_sizes[phase]
             epoch_acc_wo_mid = float(running_corrects_wo_mid) / dataset_sizes[phase]
-            epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
+            # epoch_acc_6cams = float(running_corrects_6cams / (cam_end - cam_start)) / dataset_sizes[phase]
 
             if use_mid:
                 if stage == 1:
@@ -337,8 +322,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                     r3 = 0.25
                     r4 = 0.25
                     epoch_acc = r1 * epoch_acc_cam + r2 * epoch_acc_wo + r3 * epoch_acc_cam_mid + r4 * epoch_acc_wo_mid
-                elif stage == 3:
-                    epoch_acc = epoch_acc_6cams
                 elif stage == 12:
                     r1 = 0.5
                     r2 = 0.5
@@ -352,8 +335,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
                     epoch_acc = epoch_acc_org
                 elif stage == 2:
                     epoch_acc = (epoch_acc_cam + epoch_acc_wo)/2.0
-                elif stage == 3:
-                    epoch_acc = epoch_acc_6cams
                 elif stage == 12:
                     r1 = 0.5
                     r2 = 0.5
@@ -368,7 +349,6 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
             print('acc_wo_cam     =  %.5f' % epoch_acc_wo)
             print('acc_cam_mid    =  %.5f' % epoch_acc_cam_mid)
             print('acc_wo_mid     =  %.5f' % epoch_acc_wo_mid)
-            print('acc_6cams      =  %.5f' % epoch_acc_6cams)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -451,36 +431,22 @@ def stage_params(model=model):
                  + list(map(id, model.wo_mid_rf.parameters())) \
                  + list(map(id, model.wo_mid_fc.parameters())) \
                  + list(map(id, model.wo_mid_classifier.parameters()))
-
     stage_2_base_id = list(map(id, model.model2.parameters()))
     stage_2_base_params = filter(lambda p: id(p) in stage_2_base_id, model.parameters())
     stage_2_classifier_params = filter(lambda p: id(p) in stage_2_id and id(p) not in stage_2_base_id,
                                        model.parameters())
 
-    stage_3_id = list(map(id, model.mask0.parameters())) \
-                 + list(map(id, model.mask1.parameters())) \
-                 + list(map(id, model.mask2.parameters())) \
-                 + list(map(id, model.mask3.parameters())) \
-                 + list(map(id, model.mask4.parameters())) \
-                 + list(map(id, model.mask5.parameters())) \
-                 + list(map(id, model.mul_cam_rf.parameters())) \
-                 + list(map(id, model.mul_cam_fc.parameters())) \
-                 + list(map(id, model.mul_cam_classifier.parameters()))
-    stage_3_params = filter(lambda p: id(p) in stage_3_id, model.parameters())
-
-    return stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, stage_3_params
+    return stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params
 
 
 stage_1_train = True
 stage_2_train = True
-stage_3_train = False
 stage_12_train = False
 use_mid = False
 
 if stage_1_train:
     # model = load_network_easy(model)
-    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
-    stage_3_params = stage_params(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params = stage_params(model)
     epoc = 130
     lr_ratio = 1
     step = 40
@@ -489,7 +455,6 @@ if stage_1_train:
         {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
         {'params': stage_2_base_params, 'lr': 0},
         {'params': stage_2_classifier_params, 'lr': 0},
-        {'params': stage_3_params, 'lr': 0},
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
@@ -498,8 +463,7 @@ if stage_1_train:
 
 if stage_2_train:
     model = load_network_easy(model)
-    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params,\
-    stage_3_params = stage_params(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params = stage_params(model)
     epoc = 130
     lr_ratio = 1
     step = 40
@@ -508,7 +472,6 @@ if stage_2_train:
         {'params': stage_1_classifier_params, 'lr': 0},
         {'params': stage_2_base_params, 'lr': 0.01 * lr_ratio},
         {'params': stage_2_classifier_params, 'lr': 0.05 * lr_ratio},
-        {'params': stage_3_params, 'lr': 0},
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
@@ -517,8 +480,7 @@ if stage_2_train:
 
 if stage_12_train:
     # model = load_network_easy(model)
-    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
-    stage_3_params = stage_params(model)
+    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params = stage_params(model)
     epoc = 130
     lr_ratio = 1
     step = 40
@@ -527,29 +489,8 @@ if stage_12_train:
         {'params': stage_1_classifier_params, 'lr': 0.05 * lr_ratio},
         {'params': stage_2_base_params, 'lr': 0.01 * lr_ratio},
         {'params': stage_2_classifier_params, 'lr': 0.05 * lr_ratio},
-        {'params': stage_3_params, 'lr': 0},
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                         num_epochs=epoc, stage=12)
-
-
-if stage_3_train:
-    model = load_network(model)
-    stage_1_base_params, stage_1_classifier_params, stage_2_base_params, stage_2_classifier_params, \
-    stage_3_params = stage_params(model)
-    # cal_camfeatures()
-    epoc = 20
-    lr_ratio = 1
-    step = 6
-    optimizer_ft = optim.SGD([
-        {'params': stage_1_base_params, 'lr': 0},
-        {'params': stage_1_classifier_params, 'lr': 0},
-        {'params': stage_2_base_params, 'lr': 0},
-        {'params': stage_2_classifier_params, 'lr': 0},
-        {'params': stage_3_params, 'lr': 0.05 * lr_ratio},
-    ], momentum=0.9, weight_decay=5e-4, nesterov=True)
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
-    model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                        num_epochs=epoc, stage=3)
 
