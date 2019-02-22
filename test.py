@@ -24,7 +24,7 @@ from model import ft_net, ft_net_dense
 parser = argparse.ArgumentParser(description='Training')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
-parser.add_argument('--test_dir',default='./data/duke/pytorch',type=str, help='./test_data')
+parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
@@ -74,25 +74,33 @@ use_gpu = torch.cuda.is_available()
 # Load model
 
 #----------single gpu training-----------------
-def load_network(model_structure):
-    save_path = os.path.join('./model', name, 'whole_refine_net_%s.pth' % 'best')
-    network = torch.load(save_path)
-    model_structure.load_state_dict(network.state_dict())
-    # print(network.model.features.conv0.weight[0][0])
-    # torch.save(network.state_dict(), os.path.join('./model',name,'whole_refine_param_%s.pth'%'best'))
-    # recovery_net = torch.load(os.path.join('./model',name,'whole_net_%s.pth'%'best'))
-    # print(recovery_net.model.features.conv0.weight[0][0])
-    # exit()
-    return model_structure
-
-def load_network_easy(network):
-    save_path = os.path.join('./model', name, 'net_best_stage_1_womid.pth')
-    # save_path = 'model/model_backup/sperate/stage1_r92.82_m81.22.pth'
-    # save_path = 'model/model_backup/sperate/stage_2_r90.44_m79.01_rer92.46_m89.74.pth'
-    # save_path = 'model/model_backup/sperate/net_best_stage_3.pth'
-    print('load pretrained model: %s' % save_path)
+def load_network_easy(network, model_name=None):
+    if model_name == None:
+        save_path = os.path.join('./model', name, 'net_%s.pth' % 'best_stage_1_womid')
+    else:
+        save_path = os.path.join('./model', name, 'net_%s.pth' % model_name)
+    print('load easy pretrained model: %s' % save_path)
     network.load_state_dict(torch.load(save_path))
     return network
+
+
+def load_network(network, model_name=None):
+    if model_name == None:
+        save_path = os.path.join('./model', name, 'net_%s.pth' % 'whole_last_siamese')
+    else:
+        save_path = os.path.join('./model', name, 'net_%s.pth' % model_name)
+    print('load whole pretrained model: %s' % save_path)
+    net_original = torch.load(save_path)
+    # print('pretrained = %s' % net_original.embedding_net.model.features.conv0.weight[0, 0, 0])
+    pretrained_dict = net_original.state_dict()
+    model_dict = network.state_dict()
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    # print('network_original = %s' % network.embedding_net.model.features.conv0.weight[0, 0, 0])
+    model_dict.update(pretrained_dict)
+    network.load_state_dict(model_dict)
+    # print('network_new = %s' % network.embedding_net.model.features.conv0.weight[0, 0, 0])
+    return network
+
 
 def fliplr(img):
     '''flip horizontal'''
@@ -127,11 +135,11 @@ def extract_feature(model,dataloaders):
             input_img = Variable(img.cuda())
             outputs = model(input_img)
             if int(opt.ratio) == 0:
-                f = outputs[0].data.cpu()
+                f = outputs[0].detach().cpu()
             elif int(opt.ratio) == 1:
-                f = outputs[2].data.cpu()
+                f = outputs[2].detach().cpu()
             elif int(opt.ratio) == 2:
-                f = outputs[0].data.cpu() + outputs[2].data.cpu()
+                f = outputs[0].detach().cpu() + outputs[2].detach().cpu()
 
             ff = ff+f
         # norm feature
