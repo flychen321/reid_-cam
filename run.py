@@ -6,8 +6,7 @@ for i in np.arange(1):
     print('i = %.3f' % i)
     log_name = 'log/' + 'log_' + str(i)
     print('log name = %s' % log_name)
-    cmd = 'python train_baseline.py --use_dense --data_dir duke --use_mid False --use_trainall False --modelname ' \
-          + 'model_' + str(i) + ' >> ' + log_name
+    cmd = 'python train_baseline.py --use_dense --data_dir duke --modelname ' + 'model_' + str(i) + ' >> ' + log_name
     print('cmd = %s' % cmd)
     os.system(cmd)
 
@@ -27,4 +26,4 @@ for i in np.arange(1):
     os.system('python evaluate.py' + ' >> ' + log_name)
     os.system('python evaluate_rerank.py' + ' >> ' + log_name)
 
-# python train_baseline.py --use_dense --data_dir duke --use_mid False --modelname  model_0  --use_trainall False
+# python train_baseline.py  --use_dense  --data_dir duke  --use_mid  --use_trainall  --modelname  model_0

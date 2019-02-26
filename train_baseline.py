@@ -38,14 +38,15 @@ parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help=
 parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
-parser.add_argument('--use_trainall', default=False, type=bool, help='use_trainall')
-parser.add_argument('--use_mid', default=False, type=bool, help='use_mid')
+parser.add_argument('--use_trainall', action='store_true', help='use_trainall')
+parser.add_argument('--use_mid', action='store_true', help='use_mid')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
 
 opt = parser.parse_args()
 
 opt.use_dense = True
 print('opt = %s' % opt)
+exit()
 data_dir = opt.data_dir
 if 'market' in data_dir:
     data_dir = 'data/market/pytorch'
