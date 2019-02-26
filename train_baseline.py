@@ -28,7 +28,6 @@ import json
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision.datasets import ImageFolder
-from cal_cam_feature import cal_camfeatures
 
 ######################################################################
 # Options
