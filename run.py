@@ -23,4 +23,4 @@ for i in np.arange(5):
     os.system('python evaluate.py' + ' >> ' + log_name)
     os.system('python evaluate_rerank.py' + ' >> ' + log_name)
 
-python train_baseline.py --use_dense --data_dir duke --use_mid False --modelname  model_0  --use_trainall False
+# python train_baseline.py --use_dense --data_dir duke --use_mid False --modelname  model_0  --use_trainall False

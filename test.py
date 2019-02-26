@@ -21,13 +21,13 @@ from model import ft_net, ft_net_dense
 ######################################################################
 # Options
 # --------
-parser = argparse.ArgumentParser(description='Training')
+parser = argparse.ArgumentParser(description='Testing')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch',default='best', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help='./test_data')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
-parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
+parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--mode', default=80, type=str, help='mode')
 
 opt = parser.parse_args()
@@ -186,7 +186,10 @@ query_cam,query_label,query_files = get_id(query_path)
 # Load Collected data Trained model
 print('-------test-----------')
 if opt.use_dense:
-    model_structure = ft_net_dense(751, istrain=False)
+    if 'market' in test_dir:
+        model_structure = ft_net_dense(751, istrain=False)
+    else:
+        model_structure = ft_net_dense(702, istrain=False)
 else:
     model_structure = ft_net(751)
 # model = load_network(model_structure)
