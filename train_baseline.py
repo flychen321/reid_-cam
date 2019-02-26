@@ -46,7 +46,6 @@ opt = parser.parse_args()
 
 opt.use_dense = True
 print('opt = %s' % opt)
-exit()
 data_dir = opt.data_dir
 if 'market' in data_dir:
     data_dir = 'data/market/pytorch'
@@ -205,9 +204,9 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
     best_loss = 10000.0
     best_epoch = -1
     if opt.use_trainall:
-        phase_list = ['train', 'val']
-    else:
         phase_list = ['train']
+    else:
+        phase_list = ['train', 'val']
     for epoch in range(num_epochs):
         print('Stage = %s' % stage)
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
