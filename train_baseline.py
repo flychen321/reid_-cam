@@ -39,13 +39,21 @@ parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help=
 parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
+parser.add_argument('--use_trainall', default=False, type=bool, help='use_trainall')
+parser.add_argument('--use_mid', default=False, type=bool, help='use_mid')
 parser.add_argument('--modelname', default='', type=str, help='save model name')
 
 opt = parser.parse_args()
 
 opt.use_dense = True
-
+print('opt = %s' % opt)
 data_dir = opt.data_dir
+if 'market' in data_dir:
+    data_dir = 'data/market/pytorch'
+elif 'duke' in data_dir:
+    data_dir = 'data/duke/pytorch'
+print('train data_dir = %s' % data_dir)
+use_mid = opt.use_mid
 name = opt.name
 print('modelname in train_baseline= %s' % opt.modelname)
 generated_image_size = 0
@@ -159,7 +167,10 @@ class CamDataset(ImageFolder):
 dataset_sizes = {}
 # dataset_train_dir = os.path.join(data_dir, 'train_new')
 # dataset_val_dir = os.path.join(data_dir, 'val_new')
-dataset_train_dir = os.path.join(data_dir, 'train_all')
+if opt.use_trainall:
+    dataset_train_dir = os.path.join(data_dir, 'train_all')
+else:
+    dataset_train_dir = os.path.join(data_dir, 'train')
 dataset_val_dir = os.path.join(data_dir, 'val')
 dataset_sizes['train'] = sum(len(os.listdir(os.path.join(dataset_train_dir, i))) for i in os.listdir(dataset_train_dir))
 dataset_sizes['val'] = sum(len(os.listdir(os.path.join(dataset_val_dir, i))) for i in os.listdir(dataset_val_dir))
@@ -193,14 +204,17 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
     best_acc = 0.0
     best_loss = 10000.0
     best_epoch = -1
+    if opt.use_trainall:
+        phase_list = ['train', 'val']
+    else:
+        phase_list = ['train']
     for epoch in range(num_epochs):
         print('Stage = %s' % stage)
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        # for phase in ['train', 'val']:
-        for phase in ['train']:
+        for phase in phase_list:
             if phase == 'train':
                 scheduler.step()
                 model.train(True)  # Set model to training mode
@@ -355,8 +369,7 @@ def train_model(model, criterion, optimizer, scheduler, use_mid=False, num_epoch
             y_loss[phase].append(epoch_loss)
             y_err[phase].append(1.0 - epoch_acc)
             # deep copy the model
-            # if phase == 'val':
-            if True:
+            if opt.use_trainall or phase == 'val':
                 if epoch_acc > best_acc or (np.fabs(epoch_acc - best_acc) < 1e-5 and epoch_loss < best_loss):
                     best_acc = epoch_acc
                     best_loss = epoch_loss
@@ -442,7 +455,6 @@ def stage_params(model=model):
 stage_1_train = True
 stage_2_train = True
 stage_12_train = False
-use_mid = False
 
 if stage_1_train:
     # model = load_network_easy(model)
@@ -458,7 +470,7 @@ if stage_1_train:
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                        num_epochs=epoc, stage=1)
+                        use_mid=use_mid, num_epochs=epoc, stage=1)
 
 
 if stage_2_train:
@@ -475,7 +487,7 @@ if stage_2_train:
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                        num_epochs=epoc, stage=2)
+                        use_mid=use_mid, num_epochs=epoc, stage=2)
 
 
 if stage_12_train:
@@ -492,5 +504,5 @@ if stage_12_train:
     ], momentum=0.9, weight_decay=5e-4, nesterov=True)
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step, gamma=0.1)
     model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
-                        num_epochs=epoc, stage=12)
+                        use_mid=use_mid, num_epochs=epoc, stage=12)
 

@@ -28,15 +28,20 @@ parser.add_argument('--test_dir',default='./data/market/pytorch',type=str, help=
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='save model path')
 parser.add_argument('--batchsize', default=16, type=int, help='batchsize')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
-parser.add_argument('--ratio', default=80, type=str, help='ratio')
+parser.add_argument('--mode', default=80, type=str, help='mode')
 
 opt = parser.parse_args()
 opt.use_dense = True
-print('ratio = %.3f' % (float(opt.ratio)/100.0))
+print('mode = %.3f' % float(opt.mode))
 #str_ids = opt.gpu_ids.split(',')
 #which_epoch = opt.which_epoch
 name = opt.name
-test_dir = opt.test_dir 
+test_dir = opt.test_dir
+if 'market' in test_dir:
+    test_dir = 'data/market/pytorch'
+elif 'duke' in test_dir:
+    test_dir = 'data/duke/pytorch'
+print('test data_dir = %s' % test_dir)
 '''
 gpu_ids = []
 for str_id in str_ids:
@@ -119,14 +124,19 @@ def extract_feature(model,dataloaders):
         count += n
         # print(count)
         # x, y, z, org_mid, cam_mid, wo_mid
-        opt.ratio = 0
+        opt.mode = 0
         if opt.use_dense:
-            if int(opt.ratio) == 0:
+            if int(opt.mode) == 0:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            elif int(opt.ratio) == 1:
+            elif int(opt.mode) == 1:
                 ff = torch.FloatTensor(n, 1024).zero_()
-            elif int(opt.ratio) == 2:
+            elif int(opt.mode) == 2:
                 ff = torch.FloatTensor(n, 1024).zero_()
+            elif int(opt.mode) == 3:
+                ff = torch.FloatTensor(n, 2048).zero_()
+            else:
+                print('opt.mode = %s is error !!!' % opt.mode)
+                exit()
         else:
             ff = torch.FloatTensor(n,2048).zero_()
         for i in range(2):
@@ -134,13 +144,14 @@ def extract_feature(model,dataloaders):
                 img = fliplr(img)
             input_img = Variable(img.cuda())
             outputs = model(input_img)
-            if int(opt.ratio) == 0:
+            if int(opt.mode) == 0:
                 f = outputs[0].detach().cpu()
-            elif int(opt.ratio) == 1:
+            elif int(opt.mode) == 1:
                 f = outputs[2].detach().cpu()
-            elif int(opt.ratio) == 2:
+            elif int(opt.mode) == 2:
                 f = outputs[0].detach().cpu() + outputs[2].detach().cpu()
-
+            elif int(opt.mode) == 3:
+                f = torch.cat((outputs[0].detach().cpu(), outputs[2].detach().cpu()), 1)
             ff = ff+f
         # norm feature
         fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)   # L2 normalize
