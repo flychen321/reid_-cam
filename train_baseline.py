@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(description='Training')
 # parser.add_argument('--gpu_ids',default='3', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name', default='ft_DesNet121', type=str, help='output model name')
 parser.add_argument('--data_dir', default='data/market/pytorch', type=str, help='training dir path')
-parser.add_argument('--batchsize', default=24, type=int, help='batchsize')
+parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
 parser.add_argument('--erasing_p', default=0.8, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
 parser.add_argument('--use_trainall', action='store_true', help='use_trainall')
@@ -185,6 +185,7 @@ dataloaders['val'] = DataLoader(CamDataset(dataset_val_dir, data_transforms['val
 
 id_num = len(dataloaders['train'].dataset.classes)
 cam_num = int(dataloaders['train'].dataset.get_cams_num())
+print('id_num = %d   cam_num = %d' % (id_num, cam_num))
 
 use_gpu = torch.cuda.is_available()
 
@@ -452,7 +453,7 @@ def stage_params(model=model):
 
 
 stage_1_train = True
-stage_2_train = True
+stage_2_train = False
 stage_12_train = False
 
 if stage_1_train:

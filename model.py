@@ -172,9 +172,9 @@ class ft_net_dense(nn.Module):
         model_ft.features.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.model = model_ft
         self.org_fc = FcBlock()
-        self.org_classifier = ClassBlock()
+        self.org_classifier = ClassBlock(class_num=self.class_num)
         self.org_mid_fc = FcBlock()
-        self.org_mid_classifier = ClassBlock()
+        self.org_mid_classifier = ClassBlock(class_num=self.class_num)
 
 
         model_ft2 = models.densenet121(pretrained=True)
@@ -184,13 +184,13 @@ class ft_net_dense(nn.Module):
         self.cam_classifier = ClassBlock(class_num=self.cam_num)
         self.wo_rf = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.wo_fc = FcBlock()
-        self.wo_classifier = ClassBlock()
+        self.wo_classifier = ClassBlock(class_num=self.class_num)
 
         self.cam_mid_fc = FcBlock()
         self.cam_mid_classifier = ClassBlock(class_num=self.cam_num)
         self.wo_mid_rf = FcBlock(input_dim=1024, num_bottleneck=1024)
         self.wo_mid_fc = FcBlock()
-        self.wo_mid_classifier = ClassBlock()
+        self.wo_mid_classifier = ClassBlock(class_num=self.class_num)
 
 
     def forward(self, x):

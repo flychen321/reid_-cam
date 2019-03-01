@@ -187,7 +187,7 @@ query_cam,query_label,query_files = get_id(query_path)
 print('-------test-----------')
 if opt.use_dense:
     if 'market' in test_dir:
-        model_structure = ft_net_dense(751, istrain=False)
+        model_structure = ft_net_dense(1072, istrain=False)
     else:
         model_structure = ft_net_dense(702, istrain=False)
 else:
